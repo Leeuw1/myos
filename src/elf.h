@@ -1,7 +1,7 @@
 #ifndef _ELF_H
 #define _ELF_H
 
-#include "types.h"
+#include "core.h"
 
 #define ELF_HEADER_MAGIC	0x464c457f
 #define PT_LOAD				0x1

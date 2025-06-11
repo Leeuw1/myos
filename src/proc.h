@@ -1,7 +1,7 @@
 #ifndef _PROC_H
 #define _PROC_H
 
-#include "types.h"
+#include "core.h"
 
 struct Regs {
 	u64	general[31];
@@ -11,11 +11,17 @@ struct Regs {
 	u64	ttbr;
 };
 
-void proc_main(void);
-void proc_prepare_next(u64* general_regs);
+_Noreturn void proc_main(void);
+_Noreturn void proc_run_next(void);
 const char* proc_fd_path(i32 fd);
 
 char* proc_getcwd(char* buf, usize size);
 int proc_chdir(const char* path);
+i16 proc_fork(void);
+i32 proc_execve(const char* path, const char* argv[], const char* envp[]);
+_Noreturn void proc_kill(void);
+i16 proc_getpid(void);
+_Noreturn void proc_queue_read(i32 fd, void* dst, usize size);
+_Noreturn void proc_update_pending_io(i32 fd);
 
 #endif //_PROC_H

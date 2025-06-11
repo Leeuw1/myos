@@ -5,7 +5,7 @@
 extern u8 _HEAP_START_;
 
 #define HEAP_BASE	((void*)&_HEAP_START_)
-#define HEAP_SIZE	0x80000
+#define HEAP_SIZE	0x800000
 
 #define FLAGS_IN_USE	0x1
 #define FLAGS_END		0x2
@@ -23,8 +23,12 @@ void heap_init(void) {
 }
 
 static void _heap_print(void) {
+	print("_heap_print:\n");
 	struct HeapNode* node = HEAP_BASE;
+	print_hex((u64)HEAP_BASE);
 	while (true) {
+		print("test\n");
+		printf("[heap] addr=%\n", (u64)node);
 		printf("[heap] addr=%, size=%, flags=%\n", (u64)node, (u64)node->size, (u64)node->flags);
 		if (node->flags & FLAGS_END) {
 			return;
@@ -65,11 +69,14 @@ void* kmalloc_page_align(usize size) {
 	struct HeapNode* node = HEAP_BASE;
 	struct HeapNode* prev = NULL;
 	while (true) {
-		usize pad = PAGE_SIZE - (usize)((u64)node & 0xfff) - 8;
+		const usize pad = PAGE_SIZE - (usize)((u64)node & 0xfff) - 8;
 		if (!(node->flags & FLAGS_IN_USE) && node->size >= size + pad) {
 			if (pad != 0) {
 				prev->size += pad;
+				node->size -= pad;
+				const struct HeapNode temp = *node;
 				node = (void*)prev + prev->size;
+				*node = temp;
 			}
 			node->flags |= FLAGS_IN_USE;
 			const u32 diff = node->size - size;
@@ -86,6 +93,7 @@ void* kmalloc_page_align(usize size) {
 		}
 		if (node->flags & FLAGS_END) {
 			PRINT_ERROR("Out of memory.");
+			_heap_print();
 			return NULL;
 		}
 		prev = node;
@@ -94,6 +102,9 @@ void* kmalloc_page_align(usize size) {
 }
 
 void kfree(void* addr) {
+	if (addr == NULL) {
+		return;
+	}
 	struct HeapNode* node = addr - sizeof(*node);
 	node->flags &= ~FLAGS_IN_USE;
 	if (!(node->flags & FLAGS_END)) {

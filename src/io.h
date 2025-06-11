@@ -1,7 +1,7 @@
 #ifndef _IO_H
 #define _IO_H
 
-#include "types.h"
+#include "core.h"
 
 struct Pixel {
 	u8	r;

@@ -1,7 +1,7 @@
 #ifndef _MAILBOX_H
 #define _MAILBOX_H
 
-#include "types.h"
+#include "core.h"
 
 #define MAILBOX_CLOCK_ID_EMMC	0x1
 

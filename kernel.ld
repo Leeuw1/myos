@@ -13,21 +13,26 @@ MEMORY {
 SECTIONS {
 	.init : {
 		*(.init)
-		_l1_table = ALIGN(32);
+		_l2_table = ALIGN(32);
 		. += 32;
-		_l0_table = ALIGN(8);
+		_l1_table = ALIGN(8);
 		. += 8;
 	} > stub
 
 	.rom 0xffffffff00088000 : AT(0x88000) {
 		_TEXT_START_ = .;
+		*(.got)
+		*(.got.plt)
 		*(.text)
 		_TEXT_END_ = .;
 	}
 
 	.ram 0xffffffff0009c000 : AT(0x9c000) {
 		_DATA_START_ = .;
+		*(.programs)
 		*(.rodata)
+		*(.rodata.str1.8)
+		*(.data.rel.ro.local)
 		*(.data)
 		_DATA_END_ = .;
 		. = ALIGN(8);

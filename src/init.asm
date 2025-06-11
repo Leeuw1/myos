@@ -1,5 +1,3 @@
-.equ 	STACK_BASE,		0x80000
-
 .section .init
 .globl _init
 _init:
@@ -20,11 +18,6 @@ _init:
 
 el2_begin:
 	// Change from EL2 to EL1
-
-	// NOTE: this is temporary, just want to make sure el1 exceptions are not being trapped to el2
-	adr		x0, vectors_el1
-	msr		vbar_el2, x0
-	//
 
 	// enable CNTP for EL1
     mrs     x0, cnthctl_el2
@@ -60,7 +53,7 @@ el2_begin:
 	eret
 
 el1_begin:
-	adr		x0, vectors_el1
+	ldr		x0, =vectors_el1
 	msr		vbar_el1, x0
 
 	// Isolate Core 0
@@ -73,8 +66,10 @@ halt:
 
 core0:
 	msr		daifset, #0xf
+	msr		spsel, #1
 
-	mov		sp, #STACK_BASE
+	mov		sp, #0xffffffff00000000
+	add		sp, sp, #0x80000
 
 	// Set up MMU
 
@@ -95,7 +90,7 @@ core0:
 	msr		mair_el1, x0
 
 	// Descriptors
-	adr		x1, _l1_table
+	adr		x1, _l2_table
 	orr		x1, x1, #0b11
 	mov		x2, #0b01
 	// Use attr1 (device)
@@ -104,9 +99,9 @@ core0:
 	orr		x2, x2, #(1 << 10)
 
 	// Translation tables
-	adr		x0, _l0_table
-	str		x1, [x0]
 	adr		x0, _l1_table
+	str		x1, [x0]
+	adr		x0, _l2_table
 	str		x2, [x0]
 	msr		ttbr0_el1, x0
 	msr		ttbr1_el1, x0

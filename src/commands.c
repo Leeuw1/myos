@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define EXIT_SUCCESS	0
-#define	EXIT_FAILURE	(-1)
+#define	EXIT_FAILURE	1
 
 static u8 ascii_digit_value(char c) {
 	if (c >= 'a') {
@@ -38,7 +38,7 @@ static u64 str_to_u64(const char* str) {
 	return value;
 }
 
-i32 echo(u8 argc, char** argv) {
+i32 echo(u8 argc, const char* argv[]) {
 	for (u8 i = 1; i < argc; ++i) {
 		print(argv[i]);
 		putchar(' ');
@@ -47,7 +47,7 @@ i32 echo(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 clear(u8 argc, char** argv) {
+i32 clear(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	print("\x1b[2J\x1b[1;1H");
@@ -56,7 +56,7 @@ i32 clear(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 uptime(u8 argc, char** argv) {
+i32 uptime(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	printf("% seconds\n", SYS_TIMER->clo / 0x100000);
@@ -76,7 +76,7 @@ const u64 global_var = 0xbeef;
 
 /*
 // NOTE: use this when FIFOs are disabled
-i32 pcm_clock_test(u64 argc, char** argv) {
+i32 pcm_clock_test(u64 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	PCM->cs_a.en = 1;
@@ -90,7 +90,7 @@ i32 pcm_clock_test(u64 argc, char** argv) {
 }
 */
 
-i32 address_test(u8 argc, char** argv) {
+i32 address_test(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	printf("global_var: %\n", global_var);
@@ -107,7 +107,7 @@ extern u8 _BSS_START_;
 extern u8 _BSS_END_;
 extern u8 _HEAP_START_;
 
-i32 memory_test(u8 argc, char** argv) {
+i32 memory_test(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	print("Program Linking Information:\n");
@@ -121,7 +121,7 @@ i32 memory_test(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 gpu_test(u8 argc, char** argv) {
+i32 gpu_test(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	volatile u32* v3d_regs = (volatile u32*)0x3fc00000;
@@ -148,7 +148,7 @@ static bool power_info(const char* str, u32* device_id, bool* domain) {
 	return false;
 }
 
-i32 power(u8 argc, char** argv) {
+i32 power(u8 argc, const char* argv[]) {
 	if (argc < 2) {
 		for (u32 i = 1; i < 24; ++i) {
 			printf("%: ", (u64)i);
@@ -184,18 +184,18 @@ i32 power(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 clear_screen(u8 argc, char** argv) {
+i32 clear_screen(u8 argc, const char* argv[]) {
+	(void)argv;
 	if (argc < 2) {
 		print("Not enough arguments\n");
 		return EXIT_FAILURE;
 	}
-	u64 value = str_to_u64(argv[1]);
-	// TEMPc
+	//u64 value = str_to_u64(argv[1]);
 	//screen_clear(value >> 16, (value >> 8) & 0xff, value & 0xff);
 	return EXIT_SUCCESS;
 }
 
-i32 blank_screen(u8 argc, char** argv) {
+i32 blank_screen(u8 argc, const char* argv[]) {
 	if (argc < 2) {
 		print("Not enough arguments\n");
 		return EXIT_FAILURE;
@@ -222,7 +222,7 @@ void make_abs(const char* path, char* abs_path) {
 	strcat(abs_path, rest);
 }
 
-i32 ls(u8 argc, char** argv) {
+i32 ls(u8 argc, const char* argv[]) {
 	struct FSNode* dir;
 	if (argc < 2) {
 		char cwd[64];
@@ -242,7 +242,7 @@ i32 ls(u8 argc, char** argv) {
 		print("ls: File/directory does not exist.\n");
 		return EXIT_FAILURE;
 	}
-	if ((dir->stat.st_mode & S_IFMT) != S_IFDIR) {
+	if (dir->type != FS_NODE_TYPE_DIR) {
 		print(argv[1]);
 		print("\n");
 		return EXIT_SUCCESS;
@@ -255,7 +255,7 @@ i32 ls(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 cd(u8 argc, char** argv) {
+i32 cd(u8 argc, const char* argv[]) {
 	if (argc < 2) {
 		proc_chdir("/");
 		return EXIT_SUCCESS;
@@ -268,20 +268,22 @@ i32 cd(u8 argc, char** argv) {
 		print("cd: Directory does not exist.\n");
 		exit_code = EXIT_FAILURE;
 	}
-	else if ((node->stat.st_mode & S_IFMT) != S_IFDIR) {
+	else if (node->type != FS_NODE_TYPE_DIR) {
 		print("cd: Not a directory.\n");
 		exit_code = EXIT_FAILURE;
 	}
 	else {
 		char cwd[64];
 		strcpy(cwd, path);
+		print("cd: canonicalizing path...\n");
 		fs_canonicalize(cwd, path);
+		print("cd: changing directory...\n");
 		proc_chdir(path);
 	}
 	return exit_code;
 }
 
-i32 pwd(u8 argc, char** argv) {
+i32 pwd(u8 argc, const char* argv[]) {
 	(void)argc; (void)argv;
 	char cwd[64];
 	char* result = proc_getcwd(cwd, 64);
@@ -294,7 +296,7 @@ i32 pwd(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-i32 mkdir_(u8 argc, char** argv) {
+i32 mkdir_(u8 argc, const char* argv[]) {
 	print("mkdir: no\n");
 	return EXIT_SUCCESS;
 	if (argc < 2) {
@@ -303,11 +305,11 @@ i32 mkdir_(u8 argc, char** argv) {
 	}
 	char path[128];
 	make_abs(argv[1], path);
-	fs_add(path, S_IFDIR);
+	fs_add(path, FS_NODE_TYPE_DIR);
 	return EXIT_SUCCESS;
 }
 
-i32 rmdir(u8 argc, char** argv) {
+i32 rmdir(u8 argc, const char* argv[]) {
 	if (argc < 2) {
 		print("rmdir: Not enough arguments.\n");
 		return EXIT_SUCCESS;
@@ -320,7 +322,7 @@ i32 rmdir(u8 argc, char** argv) {
 		print("rmdir: Directory does not exist.\n");
 		exit_code = EXIT_FAILURE;
 	}
-	else if ((node->stat.st_mode & S_IFMT) != S_IFDIR) {
+	else if (node->type != FS_NODE_TYPE_DIR) {
 		print("rmdir: Not a directory.\n");
 		exit_code = EXIT_FAILURE;
 	}
@@ -344,7 +346,7 @@ u16 read16_unaligned(u16* data) {
 	return (u16)bytes[0] | ((u16)bytes[1] << 8);
 }
 
-i32 fat_test(u8 argc, char** argv) {
+i32 fat_test(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 
@@ -379,14 +381,14 @@ i32 fat_test(u8 argc, char** argv) {
 
 struct CommandEntry {
 	const char*	name;
-	i32 (*func)(u8 argc, char** argv);
+	i32 (*func)(u8 argc, const char* argv[]);
 };
 
 #define ARRAY_SIZE(x)		(sizeof(x) / sizeof(x[0]))
 #define COMMAND_ENTRY(x)	{ .name = #x, .func = x }
 
-i32 help(u8 argc, char** argv);
-i32 shutdown(u8 argc, char** argv);
+i32 help(u8 argc, const char* argv[]);
+i32 shutdown(u8 argc, const char* argv[]);
 
 const struct CommandEntry command_table[] = {
 	COMMAND_ENTRY(help),
@@ -407,13 +409,15 @@ const struct CommandEntry command_table[] = {
 	COMMAND_ENTRY(cd),
 	COMMAND_ENTRY(pwd),
 	{ .name = "mkdir", .func = mkdir_ },
-	{ .name = "rmdir", .func = rmdir },
+	COMMAND_ENTRY(rmdir),
 };
 
-i32 shutdown(u8 argc, char** argv) {
+i32 shutdown(u8 argc, const char* argv[]) {
 	(void)argc; (void)argv;
 	print("[kernel] Shutting down...\n");
-	irq_disable();
+	asm ("msr daifset, #0b1111");
+	while (true) {
+	}
 	mailbox_blank_screen(1);
 	for (u32 i = 1; i < 23; ++i) {
 		mailbox_set_power(i, 0, true);
@@ -426,7 +430,7 @@ i32 shutdown(u8 argc, char** argv) {
 	__builtin_unreachable();
 }
 
-i32 help(u8 argc, char** argv) {
+i32 help(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
 	print("Commands:\n");
@@ -438,34 +442,11 @@ i32 help(u8 argc, char** argv) {
 	return EXIT_SUCCESS;
 }
 
-#define MAX_ARGC 8
-
-i32 syscall_command(char* command, u8 command_length) {
-	u8 argc = 0;
-	char* argv[MAX_ARGC] = {};
-	char* arg = command;
-	for (u64 i = 0; i < command_length; ++i) {
-		if (argc == MAX_ARGC) {
-			break;
-		}
-		if (command[i] == ' ') {
-			command[i] = '\0';
-			// Actual size of buffer is MAX_COMMAND_LENGTH + 1
-			if (command[i + 1] != ' ' && command[i + 1] != '\0') {
-				argv[argc++] = arg;
-				arg = &command[i + 1];
-			}
-		}
-	}
-	if (arg < command + command_length && argc < MAX_ARGC) {
-		argv[argc++] = arg;
-	}
+i32 syscall_command(u8 argc, const char* argv[]) {
 	for (u64 i = 0; i < ARRAY_SIZE(command_table); ++i) {
 		if (strcmp(argv[0], command_table[i].name) == 0) {
 			return command_table[i].func(argc, argv);
 		}
 	}
-	print("Unknown command.\n");
 	return EXIT_FAILURE;
 }
-

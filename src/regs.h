@@ -1,16 +1,16 @@
 #ifndef _REGS_H
 #define _REGS_H
 
-#include "types.h"
+#include "core.h"
 
-#define AUX			((volatile struct AuxRegs*)			0x3f215000)
-#define AUX_MU		((volatile struct AuxMURegs*)		0x3f215040)
-#define	SYS_TIMER	((volatile struct SysTimerRegs*)	0x3f003000)
-#define	GPIO		((volatile struct GPIORegs*)		0x3f200000)
-#define PCM			((volatile struct PCMRegs*)			0x3f203000)
-#define UART		((volatile struct UARTRegs*)		0x3f201000)
-#define INTERRUPTS	((volatile struct InterruptRegs*)	0x3f00b200)
-#define EMMC		((volatile struct EMMCRegs*)		0x3f300000)
+#define AUX			((volatile struct AuxRegs*)			0xffffffff3f215000)
+#define AUX_MU		((volatile struct AuxMURegs*)		0xffffffff3f215040)
+#define	SYS_TIMER	((volatile struct SysTimerRegs*)	0xffffffff3f003000)
+#define	GPIO		((volatile struct GPIORegs*)		0xffffffff3f200000)
+#define PCM			((volatile struct PCMRegs*)			0xffffffff3f203000)
+#define UART		((volatile struct UARTRegs*)		0xffffffff3f201000)
+#define INTERRUPTS	((volatile struct InterruptRegs*)	0xffffffff3f00b200)
+#define EMMC		((volatile struct EMMCRegs*)		0xffffffff3f300000)
 
 struct InterruptRegs {
 	u32	irq_basic_pending;
@@ -29,9 +29,6 @@ struct AuxRegs {
 	u32	irq;
 	u32	enables;
 } __attribute__((packed));
-
-#define AUX_MU_IO_REG		((volatile u32*)0x3f215040)
-#define AUX_MU_STAT_REG		((volatile u32*)0x3f215064)
 
 struct AuxMURegs {
 	u32	io_reg;

@@ -1,22 +1,25 @@
 #ifndef _FS_H
 #define _FS_H
 
-#include "types.h"
+#include "core.h"
 #include <sys/stat.h>
 
 #define FILENAME_MAX	127
+
+enum {
+	FS_NODE_TYPE_REG,
+	FS_NODE_TYPE_DIR,
+	FS_NODE_TYPE_CHR,
+};
+typedef u8	FSNodeType;
 
 struct FSNode;
 
 typedef isize (* FSReadFunc)(struct FSNode* node, void* buf, usize size);
 typedef isize (* FSWriteFunc)(struct FSNode* node, const void* buf, usize size);
 
-// NOTE: we could use a union
-// TODO: order fields to minimize padding
-// TODO: the struct stat data should maybe only be recorded inside file descriptions (per-process)
 struct FSNode {
 	char			name[FILENAME_MAX + 1];
-	struct stat		stat;
 	// Parent directory
 	struct FSNode*	parent;
 	// Pointer to next sibling node
@@ -27,13 +30,15 @@ struct FSNode {
 	FSReadFunc		read_func;
 	FSWriteFunc		write_func;
 
-	off_t			offset;
 	void*			data;
+	usize			size;
+	isize			offset;
+	FSNodeType		type;
 };
 
 // NOTE: We must call fs_init() before doing any file operations
 void fs_init(void);
-void fs_add(const char* path, mode_t mode);
+void fs_add(const char* path, FSNodeType mode);
 void fs_remove(struct FSNode* node);
 isize fs_read(struct FSNode* node, void* buf, usize size);
 isize fs_write(struct FSNode* node, const void* buf, usize size);

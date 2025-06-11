@@ -1,7 +1,7 @@
 #ifndef _HEAP_H
 #define _HEAP_H
 
-#include "types.h"
+#include "core.h"
 
 // Kernel heap functions
 void heap_init(void);

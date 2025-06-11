@@ -3,7 +3,8 @@
 #include "io.h"
 #include <string.h>
 
-#include "shell_generated.h"
+extern u8 _shell_binary;
+extern u8 _count_binary;
 
 static struct FSNode* root;
 
@@ -16,22 +17,20 @@ static isize _fs_write_tty(struct FSNode* node, const void* buf, usize size);
 static isize _fs_read_console(struct FSNode* node, void* buf, usize size);
 static isize _fs_write_console(struct FSNode* node, const void* buf, usize size);
 
-// TODO: initialize stat
-// TODO: maybe combine _fs_node_create and _fs_node_add_child into one function
-static struct FSNode* _fs_node_create(const char* name, mode_t mode, FSReadFunc read_func, FSWriteFunc write_func) {
+static struct FSNode* _fs_node_create(struct FSNode* parent, const char* name, FSNodeType type, FSReadFunc read_func, FSWriteFunc write_func) {
 	struct FSNode* node = kmalloc(sizeof *node);
 	memset(node, 0, sizeof *node);
 	strncpy(node->name, name, FILENAME_MAX);
-	node->stat.st_mode = mode;
+	node->type = type;
 	node->read_func = read_func;
 	node->write_func = write_func;
+	if (__builtin_expect(parent == NULL, false)) {
+		return node;
+	}
+	node->next = parent->children;
+	parent->children = node;
+	node->parent = parent;
 	return node;
-}
-
-static void _fs_node_add_child(struct FSNode* node, struct FSNode* child) {
-	child->next = node->children;
-	node->children = child;
-	child->parent = node;
 }
 
 static void _fs_node_remove_child(struct FSNode* child) {
@@ -56,19 +55,17 @@ static void _fs_node_remove_child(struct FSNode* child) {
 }
 
 void fs_init(void) {
-	root = _fs_node_create("", S_IFDIR, NULL, NULL);
-	_fs_node_add_child(root, _fs_node_create("tmp", S_IFDIR, NULL, NULL));
-	struct FSNode* dev_dir = _fs_node_create("dev", S_IFDIR, NULL, NULL);
-	_fs_node_add_child(root, dev_dir);
-	_fs_node_add_child(dev_dir, _fs_node_create("null", S_IFCHR, _fs_read_null, _fs_write_null));
-	_fs_node_add_child(dev_dir, _fs_node_create("tty", S_IFCHR, _fs_read_tty, _fs_write_tty));
-	_fs_node_add_child(dev_dir, _fs_node_create("console", S_IFCHR, _fs_read_console, _fs_write_console));
-	//struct FSNode* bin_dir = _fs_node_create("bin", S_IFDIR, NULL, NULL);
-	//_fs_node_add_child(root, bin_dir);
-	struct FSNode* sh = _fs_node_create("sh", S_IFREG, NULL, NULL);
-	sh->data = (void*)_shell_binary;
-	//_fs_node_add_child(bin_dir, sh);
-	_fs_node_add_child(root, sh);
+	root = _fs_node_create(NULL, "", FS_NODE_TYPE_DIR, NULL, NULL);
+	_fs_node_create(root, "tmp", FS_NODE_TYPE_DIR, NULL, NULL);
+	struct FSNode* dev_dir = _fs_node_create(root, "dev", FS_NODE_TYPE_DIR, NULL, NULL);
+	_fs_node_create(dev_dir, "null", FS_NODE_TYPE_CHR, _fs_read_null, _fs_write_null);
+	_fs_node_create(dev_dir, "tty", FS_NODE_TYPE_CHR, _fs_read_tty, _fs_write_tty);
+	_fs_node_create(dev_dir, "console", FS_NODE_TYPE_CHR, _fs_read_console, _fs_write_console);
+	struct FSNode* bin_dir = _fs_node_create(root, "bin", FS_NODE_TYPE_DIR, NULL, NULL);
+	struct FSNode* sh = _fs_node_create(bin_dir, "sh", FS_NODE_TYPE_REG, NULL, NULL);
+	sh->data = (void*)&_shell_binary;
+	struct FSNode* count = _fs_node_create(bin_dir, "count", FS_NODE_TYPE_REG, NULL, NULL);
+	count->data = (void*)&_count_binary;
 }
 
 // NOTE: Operations like chdir(), open(), close(), etc. that are process-specific are not implemented here (see proc_ functions instead)
@@ -76,7 +73,7 @@ void fs_init(void) {
 // TODO: we need to check permissions when performing FS operations
 
 static struct FSNode* _fs_find_child(const struct FSNode* node, const char* name, size_t length) {
-	if ((node->stat.st_mode & S_IFMT) != S_IFDIR) {
+	if (node->type != FS_NODE_TYPE_DIR) {
 		print("fs_find_child: Node is not a directory.\n");
 		return NULL;
 	}
@@ -131,12 +128,20 @@ struct FSNode* fs_find(const char* path) {
 
 // NOTE: assuming that path is absolute
 void fs_canonicalize(const char* path, char* canonical_path) {
+	print("fs_canonicalize(), path='");
+	print(path);
+	print("'\n");
 	struct FSNode* node = fs_find(path);
+	if (node == NULL) {
+		PRINT_ERROR("path does not refer to a valid node.");
+		return;
+	}
 	const usize max_name_count = 8;
 	const char* names[max_name_count];
 	usize name_count = 0;
 	usize length = 0;
 	for (struct FSNode* it = node; it != root; it = it->parent) {
+		print("iteration\n");
 		names[name_count++] = it->name;
 		length += strlen(it->name) + 1;
 	}
@@ -168,7 +173,7 @@ void _fs_extract_name(const char* path, const char** start, const char** end) {
 }
 
 // Used by syscalls like: open(), mkdir()
-void fs_add(const char* path, mode_t mode) {
+void fs_add(const char* path, FSNodeType type) {
 	if (strlen(path) == 1) {
 		print("fs_add: Cannot add directory '/'.\n");
 		return;
@@ -190,7 +195,7 @@ void fs_add(const char* path, mode_t mode) {
 		print("fs_add: Parent node does not exist.\n");
 		return;
 	}
-	if ((parent->stat.st_mode & S_IFMT) != S_IFDIR) {
+	if (parent->type != FS_NODE_TYPE_DIR) {
 		print("fs_add: Parent node is not a directory.\n");
 		return;
 	}
@@ -200,16 +205,15 @@ void fs_add(const char* path, mode_t mode) {
 	}
 	FSReadFunc read_func = NULL;
 	FSWriteFunc write_func = NULL;
-	switch (mode & S_IFMT) {
-	case S_IFREG:
+	switch (type) {
+	case FS_NODE_TYPE_REG:
 		read_func = _fs_read_reg;
 		write_func = _fs_write_reg;
 		break;
 	}
 	char name[FILENAME_MAX];
 	strncpy(name, name_start, name_end - name_start);
-	_fs_node_add_child(parent,
-			_fs_node_create(name, mode, read_func, write_func));
+	_fs_node_create(parent, name, type, read_func, write_func);
 }
 
 void fs_remove(struct FSNode* node) {
@@ -250,19 +254,19 @@ isize fs_write(struct FSNode* node, const void* buf, usize size) {
 
 // Resize node->data if node->stat.st_size < size
 static void _fs_ensure_min_size(struct FSNode* node, usize size) {
-	if ((usize)node->stat.st_size >= size) {
+	if ((usize)node->size >= size) {
 		return;
 	}
 	node->data = krealloc(node->data, size);
-	node->stat.st_size = size;
+	node->size = size;
 }
 
 static isize _fs_read_reg(struct FSNode* node, void* buf, usize size) {
-	if (node->offset > node->stat.st_size) {
+	if (node->offset > (isize)node->size) {
 		//return EOF;
 		return 0;
 	}
-	usize max_size = node->stat.st_size - node->offset;
+	usize max_size = node->size - node->offset;
 	usize s = size > max_size ? max_size : size;
 	memcpy(buf, node->data + node->offset, s);
 	node->offset += s;

@@ -1,8 +1,9 @@
 #ifndef _COMMANDS_H
 #define _COMMANDS_H
 
-#include "types.h"
+#include "core.h"
 
-i32 syscall_command(char* command, u8 command_length);
+i32 syscall_command(u8 argc, const char* argv[]);
+i32 shutdown(u8 argc, const char* argv[]);
 
 #endif //_COMMANDS_H
