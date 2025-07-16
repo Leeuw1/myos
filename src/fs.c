@@ -27,7 +27,7 @@ static u32 _fs_new_id(void) {
 	return id++;
 }
 
-static i32 _fs_file_create(struct FSNode* parent, const char* name, FSNodeType type, FSReadFunc read_func, FSWriteFunc write_func) {
+static i32 _fs_file_create(struct FSNode** dst, struct FSNode* parent, const char* name, FSNodeType type, FSReadFunc read_func, FSWriteFunc write_func) {
 	if (strlen(name) > MAX_FILENAME) {
 		PRINT_ERROR("File name too long.");
 		return ENAMETOOLONG;
@@ -36,7 +36,13 @@ static i32 _fs_file_create(struct FSNode* parent, const char* name, FSNodeType t
 		PRINT_ERROR("Max nodes open.");
 		return ENFILE;
 	}
-	struct FSNode* node = &_open_nodes[_open_node_count++];
+	struct FSNode* node = NULL;
+	for (usize i = 0; i < MAX_OPEN_NODES; ++i) {
+		if (_open_nodes[i].id == NODE_ID_NONE) {
+			node = &_open_nodes[i];
+			break;
+		}
+	}
 	memset(node, 0, sizeof *node);
 	node->id = _fs_new_id();
 	node->type = type;
@@ -46,6 +52,8 @@ static i32 _fs_file_create(struct FSNode* parent, const char* name, FSNodeType t
 	node->access_time = now;
 	node->modify_time = now;
 	node->status_change_time = now;
+	node->should_sync = true;
+	node->ref_count = 1;
 	if (parent->dir.entry_count == MAX_DIR_ENTRIES) {
 		PRINT_ERROR("Parent directory is full.");
 		print("name='");
@@ -56,10 +64,14 @@ static i32 _fs_file_create(struct FSNode* parent, const char* name, FSNodeType t
 	parent->dir.entries[parent->dir.entry_count].id = node->id;
 	strcpy(parent->dir.entries[parent->dir.entry_count].name, name);
 	++parent->dir.entry_count;
+	parent->modify_time = time_current();
+	parent->status_change_time = parent->modify_time;
+	parent->should_sync = true;
+	*dst = node;
 	return 0;
 }
 
-static i32 _fs_dir_create(struct FSNode* parent, const char* name) {
+static i32 _fs_dir_create(struct FSNode** dst, struct FSNode* parent, const char* name) {
 	if (strlen(name) > MAX_FILENAME) {
 		PRINT_ERROR("Directory name too long.");
 		return ENAMETOOLONG;
@@ -68,16 +80,29 @@ static i32 _fs_dir_create(struct FSNode* parent, const char* name) {
 		PRINT_ERROR("Max nodes open.");
 		return ENFILE;
 	}
-	struct FSNode* node = &_open_nodes[_open_node_count++];
+	struct FSNode* node = NULL;
+	for (usize i = 0; i < MAX_OPEN_NODES; ++i) {
+		if (_open_nodes[i].id == NODE_ID_NONE) {
+			node = &_open_nodes[i];
+			break;
+		}
+	}
 	memset(node, 0, sizeof *node);
 	node->id = _fs_new_id();
 	node->type = FS_NODE_TYPE_DIR;
+	const struct timespec now = time_current();
+	node->access_time = now;
+	node->modify_time = now;
+	node->status_change_time = now;
+	node->should_sync = true;
+	node->ref_count = 1;
 	node->dir.entry_count = 2;
 	strcpy(node->dir.entries[0].name, ".");
 	node->dir.entries[0].id = node->id;
 	strcpy(node->dir.entries[1].name, "..");
 	if (__builtin_expect(parent == NULL, false)) {
 		node->dir.entries[1].id = node->id;
+		*dst = node;
 		return 0;
 	}
 	node->dir.entries[1].id = parent->id;
@@ -88,6 +113,10 @@ static i32 _fs_dir_create(struct FSNode* parent, const char* name) {
 	parent->dir.entries[parent->dir.entry_count].id = node->id;
 	strcpy(parent->dir.entries[parent->dir.entry_count].name, name);
 	++parent->dir.entry_count;
+	parent->modify_time = time_current();
+	parent->status_change_time = parent->modify_time;
+	parent->should_sync = true;
+	*dst = node;
 	return 0;
 }
 
@@ -106,17 +135,23 @@ struct FSNode* fs_open(u32 id) {
 		PRINT_ERROR("id == NODE_ID_NONE");
 		return NULL;
 	}
-	for (usize i = 0; i < _open_node_count; ++i) {
-		if (_open_nodes[i].id == id) {
-			return &_open_nodes[i];
-		}
-	}
 	if (_open_node_count == MAX_OPEN_NODES) {
 		PRINT_ERROR("Max nodes open.");
 		return NULL;
 	}
-	struct FSNode* node = &_open_nodes[_open_node_count++];
+	usize dst_index = 0;
+	for (usize i = 0; i < MAX_OPEN_NODES; ++i) {
+		if (_open_nodes[i].id == id) {
+			++_open_nodes[i].ref_count;
+			return &_open_nodes[i];
+		}
+		if (_open_nodes[i].id == NODE_ID_NONE) {
+			dst_index = i;
+		}
+	}
+	struct FSNode* node = &_open_nodes[dst_index];
 	_fs_init_node(node, id);
+	++_open_node_count;
 	return node;
 }
 
@@ -125,22 +160,38 @@ void fs_close(struct FSNode* node) {
 		PRINT_ERROR("node == NULL");
 		return;
 	}
+	if (node->ref_count == 0) {
+		PRINT_ERROR("node->ref_count == 0");
+		return;
+	}
 	--node->ref_count;
 	if (node->ref_count != 0) {
 		return;
 	}
-	// TODO: sync, and remove from _open_nodes
-	//const usize index = node - _open_nodes;
+	if (node->should_sync) {
+		// TODO: sync
+	}
+	// NOTE: before syncing is implemented, we should prevent modified nodes from being closed
+	if (node->id >= 0xff000000 && node->should_sync) {
+		node->ref_count = 1;
+		return;
+	}
+	node->id = NODE_ID_NONE;
+	if (node->type == FS_NODE_TYPE_REG) {
+		kfree(node->file.data);
+	}
 }
 
 void fs_init(void) {
 	_open_node_count = 0;
+	memset(_open_nodes, 0, sizeof(_open_nodes));
 	struct FSNode* root = fs_open(NODE_ID_ROOT);
-	_fs_dir_create(root, "dev");
-	struct FSNode* dev = &_open_nodes[_open_node_count - 1];
-	i32 b = _fs_file_create(dev, "null", FS_NODE_TYPE_CHR, _fs_read_null, _fs_write_null);
-	b |= _fs_file_create(dev, "tty", FS_NODE_TYPE_CHR, _fs_read_tty, _fs_write_tty);
-	b |= _fs_file_create(dev, "console", FS_NODE_TYPE_CHR, _fs_read_console, _fs_write_console);
+	struct FSNode* dev;
+	i32 b = _fs_dir_create(&dev, root, "dev");
+	struct FSNode* dst;
+	b |= _fs_file_create(&dst, dev, "null", FS_NODE_TYPE_CHR, _fs_read_null, _fs_write_null);
+	b |= _fs_file_create(&dst, dev, "tty", FS_NODE_TYPE_CHR, _fs_read_tty, _fs_write_tty);
+	b |= _fs_file_create(&dst, dev, "console", FS_NODE_TYPE_CHR, _fs_read_console, _fs_write_console);
 	u32 bin_id;
 	const i32 result = fs_find(&bin_id, "/bin");
 	struct FSNode* bin;
@@ -148,11 +199,10 @@ void fs_init(void) {
 		bin = fs_open(bin_id);
 	}
 	else {
-		b |= _fs_dir_create(root, "bin");
-		bin = &_open_nodes[_open_node_count - 1];
+		b |= _fs_dir_create(&bin, root, "bin");
 	}
-	b |= _fs_file_create(bin, "sh", FS_NODE_TYPE_REG, NULL, NULL);
-	struct FSNode* sh = &_open_nodes[_open_node_count - 1];
+	struct FSNode* sh;
+	b |= _fs_file_create(&sh, bin, "sh", FS_NODE_TYPE_REG, NULL, NULL);
 	sh->file.data = (void*)&_shell_binary;
 	if (b != 0) {
 		PRINT_ERROR("Failed.");
@@ -278,6 +328,12 @@ i32 fs_rename(u32 old_parent_id, const char* old_name, u32 new_parent_id, const 
 	new_parent->dir.entries[new_parent->dir.entry_count].id = node_id;
 	strcpy(new_parent->dir.entries[new_parent->dir.entry_count].name, new_name);
 	++new_parent->dir.entry_count;
+	old_parent->modify_time = time_current();
+	old_parent->status_change_time = old_parent->modify_time;
+	old_parent->should_sync = true;
+	new_parent->modify_time = old_parent->modify_time;
+	new_parent->status_change_time = new_parent->modify_time;
+	new_parent->should_sync = true;
 cleanup:
 	fs_close(old_parent);
 	fs_close(new_parent);
@@ -301,6 +357,9 @@ i32 fs_unlink(u32 parent_id, const char* name) {
 		parent->dir.entries[i].id = parent->dir.entries[i + 1].id;
 		strcpy(parent->dir.entries[i].name, parent->dir.entries[i + 1].name);
 	}
+	parent->modify_time = time_current();
+	parent->status_change_time = parent->modify_time;
+	parent->should_sync = true;
 	fs_close(parent);
 	fs_close(node);
 	return 0;
@@ -308,7 +367,13 @@ i32 fs_unlink(u32 parent_id, const char* name) {
 
 i32 fs_mkdir(u32 parent_id, const char* name) {
 	struct FSNode* parent = fs_open(parent_id);
-	const i32 result = _fs_dir_create(parent, name);
+	struct FSNode* node;
+	const i32 result = _fs_dir_create(&node, parent, name);
+	if (result == 0) {
+		parent->modify_time = time_current();
+		parent->status_change_time = parent->modify_time;
+		parent->should_sync = true;
+	}
 	fs_close(parent);
 	return result;
 }
@@ -348,6 +413,9 @@ i32 fs_rmdir(u32 node_id) {
 	for (usize i = index; i < parent->dir.entry_count; ++i) {
 		parent->dir.entries[i] = parent->dir.entries[i + 1];
 	}
+	parent->modify_time = time_current();
+	parent->status_change_time = parent->modify_time;
+	parent->should_sync = true;
 cleanup:
 	fs_close(node);
 	fs_close(parent);
@@ -359,12 +427,13 @@ struct FSNode* fs_creat(u32 parent_id, const char* name) {
 	if (parent == NULL) {
 		return NULL;
 	}
-	const i32 result = _fs_file_create(parent, name, FS_NODE_TYPE_REG, _fs_read_reg, _fs_write_reg);
+	struct FSNode* node;
+	const i32 result = _fs_file_create(&node, parent, name, FS_NODE_TYPE_REG, _fs_read_reg, _fs_write_reg);
 	fs_close(parent);
-	return result == 0 ? &_open_nodes[_open_node_count - 1] : NULL;
+	return result == 0 ? node : NULL;
 }
 
-static void _fs_update_stack(char stack[MAX_FILENAME][8], usize* stack_count, const char* name, usize length) {
+static void _fs_update_stack(char stack[8][MAX_FILENAME], usize* stack_count, const char* name, usize length) {
 	if (length == 1 && name[0] == '.') {
 		return;
 	}
@@ -391,7 +460,7 @@ i32 fs_canonicalize(char* dst, const char* path) {
 	print(path);
 	print("'\n");
 #endif
-	char stack[MAX_FILENAME][8];
+	char stack[8][MAX_FILENAME];
 	usize stack_count = 0;
 	u32 id = NODE_ID_ROOT;
 	const char* name_start = path;
@@ -473,6 +542,7 @@ void fs_canonicalize(char* dst, const struct FSNode* node) {
 }
 #endif
 
+#if 0
 // Write filename to dst
 static void _fs_extract_name(const char* path, const char** start, const char** end) {
 	*end = path + strlen(path) - 1;
@@ -487,10 +557,15 @@ static void _fs_extract_name(const char* path, const char** start, const char** 
 	}
 	++*start;
 }
+#endif
 
 // TODO: might want to check whether the node is a directory, in which case read_func and write_func are NULL
 isize fs_read(struct FSNode* node, void* buf, usize size, isize* offset) {
 	if (node == NULL) {
+		return -1;
+	}
+	if (node->file.read_func == NULL) {
+		PRINT_ERROR("read_func == NULL");
 		return -1;
 	}
 	return node->file.read_func(node, buf, size, offset);
@@ -500,7 +575,17 @@ isize fs_write(struct FSNode* node, const void* buf, usize size, isize* offset) 
 	if (node == NULL) {
 		return -1;
 	}
-	return node->file.write_func(node, buf, size, offset);
+	if (node->file.write_func == NULL) {
+		PRINT_ERROR("write_func == NULL");
+		return -1;
+	}
+	const isize result = node->file.write_func(node, buf, size, offset);
+	if (result > 0) {
+		node->modify_time = time_current();
+		node->status_change_time = node->modify_time;
+		node->should_sync = true;
+	}
+	return result;
 }
 
 static void _fs_ensure_min_size(struct FSNode* node, usize size) {

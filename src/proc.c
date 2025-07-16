@@ -150,7 +150,10 @@ static void _proc_init(struct Proc* proc, i16 id, const char* cwd) {
 	}
 
 	u32 tty_id;
-	fs_find(&tty_id, "/dev/tty");
+	const i32 result = fs_find(&tty_id, "/dev/tty");
+	if (result != 0) {
+		PRINT_ERROR("Could not find node for /dev/tty.");
+	}
 	struct FSNode* tty = fs_open(tty_id);
 	proc->fd_table[0].node = tty;
 	proc->fd_table[1].node = tty;

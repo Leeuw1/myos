@@ -186,6 +186,7 @@ static void _synchronous_error(void) {
 		}
 	case CLASS_INST_ABORT_SAME_EL_EX:
 		print("Instruction abort from same exception level (EL1)\n");
+		printf("Instruction address: %\n", _elr_address());
 		_print_data_abort_info();
 		break;
 	case CLASS_DATA_ABORT_LOWER_EL_EX:
@@ -202,6 +203,7 @@ static void _synchronous_error(void) {
 		}
 	case CLASS_DATA_ABORT_SAME_EL_EX:
 		print("Data abort from same exception level (EL1)\n");
+		printf("Instruction address: %\n", _elr_address());
 		_print_data_abort_info();
 		break;
 	}

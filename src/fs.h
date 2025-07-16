@@ -48,6 +48,7 @@ struct FSNode {
 	u32				id;
 	u16				ref_count;
 	FSNodeType		type;
+	bool			should_sync;
 };
 
 // NOTE: We must call fs_init() before doing any file operations
