@@ -5,7 +5,6 @@
 
 // NOTE: assuming this is a mask for the filetype bits
 #define	S_IFMT		070000
-// TODO: use higher bits
 #define	S_IFBLK		010000
 #define	S_IFCHR		020000
 #define	S_IFIFO		030000
@@ -38,6 +37,10 @@
 #define S_ISGID		02000
 #define S_ISVTX		01000
 
+#define st_atime	st_atim.tv_sec
+#define st_mtime	st_mtim.tv_sec
+#define st_ctime	st_ctim.tv_sec
+
 struct stat {
 	dev_t st_dev;        // Device ID of device containing file.
 	ino_t st_ino;        // File serial number.
@@ -62,12 +65,17 @@ struct stat {
 	blkcnt_t st_blocks;      // Number of blocks allocated for this object.
 };
 
+int chmod(const char *, mode_t);
+int fstat(int fd, struct stat* statp);
+int mkdir(const char* path, mode_t mode);
+int stat(const char* restrict path, struct stat* restrict statp);
+mode_t umask(mode_t);
+
 // TODO: implement
 #if 0
 int    chmod(const char *, mode_t);
 int    fchmod(int, mode_t);
 int    fchmodat(int, const char *, mode_t, int);
-int    fstat(int, struct stat *);
 int    fstatat(int, const char *restrict, struct stat *restrict, int);
 int    futimens(int, const struct timespec [2]);
 int    lstat(const char *restrict, struct stat *restrict);

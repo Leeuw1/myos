@@ -3,6 +3,8 @@
 
 #include "core.h"
 
+struct termios;
+
 struct Pixel {
 	u8	r;
 	u8	g;
@@ -26,9 +28,15 @@ extern u16 column;
 void screen_putchar(char c);
 void screen_clear(u8 r, u8 g, u8 b);
 
+void tty_init(void);
+bool tty_canonical_mode(void);
 char tty_getchar(void);
-char tty_peekchar(void);
 void tty_putchar(char c);
+bool tty_line_add_char(char c);
+usize tty_flush_line(void* dst, usize size);
+void tty_tcgetattr(struct termios* termios_p);
+void tty_tcsetattr(i32 optional_actions, const struct termios* termios_p);
+bool tty_read_would_block(void);
 
 char putchar(char c);
 void print(const char* str);

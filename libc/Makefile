@@ -1,13 +1,36 @@
 CC := bear -- aarch64-linux-gnu-gcc
+AS := aarch64-linux-gnu-as
 AR := aarch64-linux-gnu-ar
-CFLAGS := -nostdlib -nostdinc -Wall -Wextra -O1 -mcpu=cortex-a53 -I./include -I./src
-objects := ./bin/string.o
+ARFLAGS := rc
+CFLAGS := -nostdlib -nostdinc -Wall -Wextra -Wno-builtin-declaration-mismatch -O1 -mcpu=cortex-a53 -I./include
+objects := ./bin/string.o ./bin/stdio.o ./bin/stdlib.o ./bin/fcntl.o ./bin/unistd.o ./bin/ctype.o ./bin/errno.o ./bin/wait.o ./bin/locale.o ./bin/signal.o ./bin/time.o ./bin/math.o ./bin/dirent.o ./bin/stat.o ./bin/termios.o ./bin/termcap.o ./bin/poll.o ./bin/grp.o ./bin/pwd.o
 
-./bin/libc.a: $(objects)
-	$(AR) rcs ./bin/libc.a $(objects)
+#all: ./lib/libc.so.6 ./lib/libm.so.6
+all: ./lib/libmyos_c.a ./lib/libmyos_m.a
+
+#./lib/libc.so.6: $(objects)
+#	$(CC) $(CFLAGS) -shared $(objects) -o ./lib/libc.so.6
+
+#./lib/libm.so.6: ./bin/math.o
+#	$(CC) $(CFLAGS) -shared ./bin/math.o -o ./lib/libm.so.6
+
+./lib/libmyos_c.a: $(objects) ./bin/main_wrapper.o ./bin/setjmp.o
+	$(AR) $(ARFLAGS) ./lib/libmyos_c.a $(objects) ./bin/main_wrapper.o ./bin/setjmp.o
+
+./lib/libmyos_m.a: ./bin/math.o
+	$(AR) $(ARFLAGS) ./lib/libmyos_m.a ./bin/math.o
 
 $(objects): ./bin/%.o: ./src/%.c
 	$(CC) $(CFLAGS) -c $^ -o $@
 
+./bin/math.o: ./src/math.c
+	$(CC) $(CFLAGS) -c ./src/math.c -o ./bin/math.o
+
+./bin/main_wrapper.o: ./src/main_wrapper.asm
+	$(AS) ./src/main_wrapper.asm -o ./bin/main_wrapper.o
+
+./bin/setjmp.o: ./src/setjmp.asm
+	$(AS) ./src/setjmp.asm -o ./bin/setjmp.o
+
 clean:
-	rm -f ./bin/*
+	rm -f ./bin/* ./lib/*

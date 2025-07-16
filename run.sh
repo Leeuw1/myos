@@ -9,5 +9,5 @@ qemu-system-aarch64 $extra \
 	-serial none \
 	-serial stdio \
 	-vga none \
-	-kernel ./bin/kernel.elf
-	#-d guest_errors,unimp,int \
+	-kernel ./bin/kernel.elf \
+	-drive if=sd,file=./qemu_sd_image.img,format=raw

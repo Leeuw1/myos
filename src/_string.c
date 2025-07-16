@@ -97,3 +97,15 @@ size_t strnlen(const char* s, size_t n) {
 	}
 	return n;
 }
+
+char* strrchr(const char* s, int c) {
+	size_t length = strlen(s) + 1;
+	size_t i;
+	for (i = 0; i < length; ++i) {
+		const char* it = s + length - 1 - i;
+		if (*it == (char)c) {
+			return (char*)it;
+		}
+	}
+	return NULL;
+}

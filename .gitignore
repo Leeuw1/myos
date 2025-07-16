@@ -1,0 +1,17 @@
+TODO*.txt
+.cache
+libc/.cache
+bin
+lua
+vim
+readline
+compile_commands.json
+libc/compile_commands.json
+libc/lib
+qemu
+qemu_logs.txt
+qemu_sd_image.img
+shell/*.o
+shell/shell
+shell/count
+shell/compile_commands.json

@@ -41,15 +41,18 @@ el2_begin:
     msr     hcr_el2, x0
     mrs     x0, hcr_el2
     // Setup SCTLR access
-    mov     x2, #0x0800
-    //movk    x2, #0x30d0, lsl #16
-    movk    x2, #0x80, lsl #16
-    msr     sctlr_el1, x2
+    //mov     x0, #0x0800
+    ////movk    x0, #0x30d0, lsl #16
+    //movk    x0, #0x80, lsl #16
+	mov		x0, #(1 << 22)
+	orr		x0, x0, #(1 << 11)
+    msr     sctlr_el1, x0
     // change exception level to EL1
-    mov     x2, #0x3c4
-    msr     spsr_el2, x2
-    adr     x2, el1_begin
-    msr     elr_el2, x2
+    //mov     x0, #0x3c4
+    mov     x0, #0x3c5
+    msr     spsr_el2, x0
+    adr     x0, el1_begin
+    msr     elr_el2, x0
 	eret
 
 el1_begin:
@@ -66,7 +69,6 @@ halt:
 
 core0:
 	msr		daifset, #0xf
-	msr		spsel, #1
 
 	mov		sp, #0xffffffff00000000
 	add		sp, sp, #0x80000
@@ -81,6 +83,10 @@ core0:
 	// T1SZ
 	mov		x1, #(32 << 16)
 	orr		x0, x0, x1
+	// Use 16 bit ASID
+	orr		x0, x0, #(1 << 36)
+	// Disable hierarchical permissions
+	//orr		x0, x0, #(0b11 << 41)
 	msr		tcr_el1, x0
 
 	// attr0 is Normal Memory
@@ -99,12 +105,12 @@ core0:
 	orr		x2, x2, #(1 << 10)
 
 	// Translation tables
-	adr		x0, _l1_table
-	str		x1, [x0]
 	adr		x0, _l2_table
 	str		x2, [x0]
-	msr		ttbr0_el1, x0
+	adr		x0, _l1_table
+	str		x1, [x0]
 	msr		ttbr1_el1, x0
+	msr		ttbr0_el1, x0 
 	isb
 
 	mrs		x0, sctlr_el1

@@ -5,6 +5,9 @@
 #include "exception.h"
 #include "proc.h"
 #include "fs.h"
+#include "sd.h"
+#include "mbr.h"
+#include "fat.h"
 #include <string.h>
 
 #define EXIT_SUCCESS	0
@@ -38,31 +41,6 @@ static u64 str_to_u64(const char* str) {
 	return value;
 }
 
-i32 echo(u8 argc, const char* argv[]) {
-	for (u8 i = 1; i < argc; ++i) {
-		print(argv[i]);
-		putchar(' ');
-	}
-	putchar('\n');
-	return EXIT_SUCCESS;
-}
-
-i32 clear(u8 argc, const char* argv[]) {
-	(void)argc;
-	(void)argv;
-	print("\x1b[2J\x1b[1;1H");
-	// TEMPc
-	//screen_clear(0, 0, 0);
-	return EXIT_SUCCESS;
-}
-
-i32 uptime(u8 argc, const char* argv[]) {
-	(void)argc;
-	(void)argv;
-	printf("% seconds\n", SYS_TIMER->clo / 0x100000);
-	return EXIT_SUCCESS;
-}
-
 /*
 static void pcm_wait_2_clocks() {
 	PCM->cs_a.sync = 1;
@@ -71,8 +49,6 @@ static void pcm_wait_2_clocks() {
 	PCM->cs_a.sync = 0;
 }
 */
-
-const u64 global_var = 0xbeef;
 
 /*
 // NOTE: use this when FIFOs are disabled
@@ -90,14 +66,6 @@ i32 pcm_clock_test(u64 argc, const char* argv[]) {
 }
 */
 
-i32 address_test(u8 argc, const char* argv[]) {
-	(void)argc;
-	(void)argv;
-	printf("global_var: %\n", global_var);
-	printf("&global_var: %\n", (u64)&global_var);
-	return EXIT_SUCCESS;
-}
-
 // NOTE: these are like assembly labels, so we want their ADDRESS rather than their VALUE
 extern u8 _TEXT_START_;
 extern u8 _TEXT_END_;
@@ -106,20 +74,6 @@ extern u8 _DATA_END_;
 extern u8 _BSS_START_;
 extern u8 _BSS_END_;
 extern u8 _HEAP_START_;
-
-i32 memory_test(u8 argc, const char* argv[]) {
-	(void)argc;
-	(void)argv;
-	print("Program Linking Information:\n");
-	printf("_TEXT_START_: %\n", (u64)&_TEXT_START_);
-	printf("_TEXT_END_: %\n", (u64)&_TEXT_END_);
-	printf("_DATA_START_: %\n", (u64)&_DATA_START_);
-	printf("_DATA_END_: %\n", (u64)&_DATA_END_);
-	printf("_BSS_START_: %\n", (u64)&_BSS_START_);
-	printf("_BSS_END_: %\n", (u64)&_BSS_END_);
-	printf("_HEAP_START_: %\n", (u64)&_HEAP_START_);
-	return EXIT_SUCCESS;
-}
 
 i32 gpu_test(u8 argc, const char* argv[]) {
 	(void)argc;
@@ -222,67 +176,6 @@ void make_abs(const char* path, char* abs_path) {
 	strcat(abs_path, rest);
 }
 
-i32 ls(u8 argc, const char* argv[]) {
-	struct FSNode* dir;
-	if (argc < 2) {
-		char cwd[64];
-		char* result = proc_getcwd(cwd, 64);
-		if (result == NULL) {
-			print("ls: Buffer too small (cwd will not fit).\n");
-			return EXIT_FAILURE;
-		}
-		dir = fs_find(cwd);
-	}
-	else {
-		char path[128];
-		make_abs(argv[1], path);
-		dir = fs_find(path);
-	}
-	if (dir == NULL) {
-		print("ls: File/directory does not exist.\n");
-		return EXIT_FAILURE;
-	}
-	if (dir->type != FS_NODE_TYPE_DIR) {
-		print(argv[1]);
-		print("\n");
-		return EXIT_SUCCESS;
-	}
-	for (struct FSNode* it = dir->children; it != NULL; it = it->next) {
-		print(it->name);
-		print("  ");
-	}
-	print("\n");
-	return EXIT_SUCCESS;
-}
-
-i32 cd(u8 argc, const char* argv[]) {
-	if (argc < 2) {
-		proc_chdir("/");
-		return EXIT_SUCCESS;
-	}
-	char path[128];
-	make_abs(argv[1], path);
-	const struct FSNode* node = fs_find(path);
-	i32 exit_code = EXIT_SUCCESS;
-	if (node == NULL) {
-		print("cd: Directory does not exist.\n");
-		exit_code = EXIT_FAILURE;
-	}
-	else if (node->type != FS_NODE_TYPE_DIR) {
-		print("cd: Not a directory.\n");
-		exit_code = EXIT_FAILURE;
-	}
-	else {
-		char cwd[64];
-		strcpy(cwd, path);
-		print("cd: canonicalizing path...\n");
-		fs_canonicalize(cwd, path);
-		print("cd: changing directory...\n");
-		proc_chdir(path);
-	}
-	return exit_code;
-}
-
 i32 pwd(u8 argc, const char* argv[]) {
 	(void)argc; (void)argv;
 	char cwd[64];
@@ -296,61 +189,21 @@ i32 pwd(u8 argc, const char* argv[]) {
 	return EXIT_SUCCESS;
 }
 
-i32 mkdir_(u8 argc, const char* argv[]) {
-	print("mkdir: no\n");
-	return EXIT_SUCCESS;
-	if (argc < 2) {
-		print("mkdir: Not enough arguments.\n");
-		return EXIT_SUCCESS;
-	}
-	char path[128];
-	make_abs(argv[1], path);
-	fs_add(path, FS_NODE_TYPE_DIR);
-	return EXIT_SUCCESS;
-}
-
-i32 rmdir(u8 argc, const char* argv[]) {
-	if (argc < 2) {
-		print("rmdir: Not enough arguments.\n");
-		return EXIT_SUCCESS;
-	}
-	char path[128];
-	make_abs(argv[1], path);
-	struct FSNode* node = fs_find(path);
-	i32 exit_code = EXIT_SUCCESS;
-	if (node == NULL) {
-		print("rmdir: Directory does not exist.\n");
-		exit_code = EXIT_FAILURE;
-	}
-	else if (node->type != FS_NODE_TYPE_DIR) {
-		print("rmdir: Not a directory.\n");
-		exit_code = EXIT_FAILURE;
-	}
-	else {
-		fs_remove(node);
-	}
-	return exit_code;
-}
-
-#if 0
 struct MBR mbr = {};
-#endif
 
-u32 read32_unaligned(u32* data) {
-	u8* bytes = (u8*)data;
+u32 read32_unaligned(const u32* data) {
+	const u8* bytes = (u8*)data;
 	return (u32)bytes[0] | ((u32)bytes[1] << 8) | ((u32)bytes[2] << 16) | ((u32)bytes[3] << 24);
 }
 
-u16 read16_unaligned(u16* data) {
-	u8* bytes = (u8*)data;
+u16 read16_unaligned(const u16* data) {
+	const u8* bytes = (u8*)data;
 	return (u16)bytes[0] | ((u16)bytes[1] << 8);
 }
 
 i32 fat_test(u8 argc, const char* argv[]) {
 	(void)argc;
 	(void)argv;
-
-#if 0
 
 	// TODO: once this is working we will probably only call this function once
 	if (!sd_init()) {
@@ -370,12 +223,22 @@ i32 fat_test(u8 argc, const char* argv[]) {
 		print("magic bytes not found at end of MBR\n");
 		return EXIT_FAILURE;
 	}
-	u32 start_sector = read32_unaligned(&mbr.partitions[0].start_sector);
-	u32 sector_count = read32_unaligned(&mbr.partitions[0].sector_count);
-	fat_mount_partition(start_sector, sector_count);
-	fat_test_bpb();
+	print("MBR magic OK\n");
+#if 0
+	for (usize i = 0; i < 4; ++i) {
+		const u32 start_sector = read32_unaligned(&mbr.partitions[i].start_sector);
+		const u32 sector_count = read32_unaligned(&mbr.partitions[i].sector_count);
+		printf("Partition %:\n", (u64)i);
+		printf("start_sector=%, sector_count=%, type=%, attr=%\n",
+				(u64)start_sector, (u64)sector_count,
+				(u64)mbr.partitions[i].type, (u64)mbr.partitions[i].attr);
+	}
 #endif
-
+	const u32 start_sector = read32_unaligned(&mbr.partitions[0].start_sector);
+	const u32 sector_count = read32_unaligned(&mbr.partitions[0].sector_count);
+	printf("Partition: start_sector=%, sector_count=%\n",
+			(u64)start_sector, (u64)sector_count);
+	fat_mount_partition(start_sector, sector_count);
 	return EXIT_SUCCESS;
 }
 
@@ -393,23 +256,14 @@ i32 shutdown(u8 argc, const char* argv[]);
 const struct CommandEntry command_table[] = {
 	COMMAND_ENTRY(help),
 	COMMAND_ENTRY(shutdown),
-	COMMAND_ENTRY(echo),
-	COMMAND_ENTRY(clear),
-	COMMAND_ENTRY(uptime),
 	//COMMAND_ENTRY(pcm_clock_test),
-	COMMAND_ENTRY(address_test),
-	COMMAND_ENTRY(memory_test),
 	COMMAND_ENTRY(gpu_test),
 	COMMAND_ENTRY(power),
 	COMMAND_ENTRY(clear_screen),
 	COMMAND_ENTRY(blank_screen),
 	//COMMAND_ENTRY(snake),
 	COMMAND_ENTRY(fat_test),
-	COMMAND_ENTRY(ls),
-	COMMAND_ENTRY(cd),
 	COMMAND_ENTRY(pwd),
-	{ .name = "mkdir", .func = mkdir_ },
-	COMMAND_ENTRY(rmdir),
 };
 
 i32 shutdown(u8 argc, const char* argv[]) {

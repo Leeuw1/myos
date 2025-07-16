@@ -39,6 +39,6 @@ SECTIONS {
 		_BSS_START_ = .;
 		*(.bss)
 		_BSS_END_ = .;
-		_HEAP_START_ = ALIGN(4096) + 4088;
+		_HEAP_START_ = ALIGN(4096);
 	}
 }

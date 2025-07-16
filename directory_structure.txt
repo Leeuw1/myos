@@ -1,0 +1,4 @@
+libc/
+	- Standard C and POSIX headers + implementation
+src/
+	- Kernel source code
