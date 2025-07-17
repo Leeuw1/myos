@@ -84,6 +84,7 @@
 #define SYSCALL_SIGACTION		24
 #define SYSCALL_SIGRETURN		25
 #define SYSCALL_GROW_HEAP		26
+#define SYSCALL_CANONICALIZE	27
 
 union SyscallArgs {
 	struct {
@@ -219,6 +220,13 @@ union SyscallArgs {
 	struct {
 		usize	ALIGN(8)	size;
 	} grow_heap;
+	struct {
+		union {
+			i32			retval;
+			const char*	path;
+		} ALIGN(8);
+		char*	ALIGN(8)	dst;
+	} canonicalize;
 };
 
 u64 syscall_time(void);

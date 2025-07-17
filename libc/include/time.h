@@ -2,6 +2,7 @@
 #define _TIME_H
 
 #include <sys/types.h>
+#include <sys/select.h>
 #include <locale.h>
 #include <signal.h>
 #include <stddef.h>
@@ -10,6 +11,7 @@
 
 // TODO
 #define CLOCKS_PER_SEC	0x100000
+#define TIME_UTC		1
 
 struct tm {
 	int         tm_sec;    // Seconds [0,60].
@@ -41,6 +43,7 @@ extern char  *tzname[];
 
 clock_t clock(void);
 time_t time(time_t* tloc);
+int gettimeofday(struct timeval* restrict tp, void* restrict tzp); // Deprecated
 struct tm* gmtime_r(const time_t* restrict, struct tm* restrict);
 struct tm *localtime(const time_t*);
 struct tm *localtime_r(const time_t *restrict, struct tm *restrict);

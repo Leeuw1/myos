@@ -42,6 +42,19 @@ static time_t _seconds_per_month(int month) {
 }
 #endif
 
+int gettimeofday(struct timeval* restrict tp, void* restrict tzp) {
+	(void)tzp;
+	struct timespec now;
+	const int result = timespec_get(&now, TIME_UTC);
+	if (result != 0) {
+		return result;
+	}
+	tp->tv_sec = now.tv_sec;
+	// 1 microsecond == 1000 nanoseconds
+	tp->tv_usec = now.tv_nsec / 1000;
+	return 0;
+}
+
 // NOTE: Not a correct implementation, just a rough estimate
 struct tm* gmtime_r(const time_t* restrict timep, struct tm* restrict result) {
 	time_t t = *timep;
@@ -61,6 +74,11 @@ struct tm* gmtime_r(const time_t* restrict timep, struct tm* restrict result) {
 	result->tm_sec = t;
 	result->tm_zone = "UTC";
 	return result;
+}
+
+struct tm *localtime(const time_t*) {
+	UNIMP();
+	return NULL;
 }
 
 struct tm* localtime_r(const time_t* restrict timep, struct tm* restrict result) {
@@ -90,5 +108,7 @@ double difftime(time_t, time_t) {
 
 int timespec_get(struct timespec* buf, int base) {
 	UNIMP();
+	buf->tv_sec = time(NULL);
+	buf->tv_nsec = 0;
 	return 0;
 }

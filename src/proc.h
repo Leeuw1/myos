@@ -46,5 +46,6 @@ isize proc_lseek(i32 fd, isize offset, i32 whence);
 i32 proc_sigaction(i32 sig, sigset_t mask, i32 flags, void* handler, void* wrapper);
 _Noreturn void proc_sigreturn(void);
 void proc_grow_heap(usize size);
+i32 proc_canonicalize(const char* restrict path, char* restrict dst);
 
 #endif //_PROC_H

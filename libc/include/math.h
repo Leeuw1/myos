@@ -19,6 +19,7 @@ double frexp(double x, int* exp);
 float frexpf(float x, int* exp);
 double ldexp(double x, int exp);
 float ldexpf(float x, int exp);
+long double ldexpl(long double x, int exp);
 double log(double x);
 float logf(float x);
 double log10(double x);

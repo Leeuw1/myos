@@ -41,6 +41,9 @@
 
 #define SA_SIGINFO	1
 
+#define FPE_INTDIV	0
+#define FPE_FLTDIV	1
+
 #define SIGNAL_INDEX(sig)	(sig - 1)
 #define VALID_SIGNAL(sig)	(sig >= SIGABRT && sig <= SIGXFSZ)
 #define SIGNAL_COUNT		SIGXFSZ
@@ -64,6 +67,30 @@ struct sigaction {
 	sigset_t	sa_mask;			// Set of signals to be blocked during execution
 									// of the signal handling function.
 	int			sa_flags;			// Special flags.
+};
+
+typedef struct mcontext_t	mcontext_t;
+struct mcontext_t {
+	uint64_t	regs[30];
+	uint64_t	pc;
+};
+
+typedef struct stack_t	stack_t;
+struct stack_t {
+	void*	ss_sp;		// Stack base or pointer.
+	size_t	ss_size;	// Stack size.
+	int		ss_flags;	// Flags.
+};
+
+typedef struct ucontext_t	ucontext_t;
+struct ucontext_t {
+	ucontext_t*	uc_link;		// Pointer to the context that is resumed
+								// when this context returns.
+	sigset_t	uc_sigmask;		// The set of signals that are blocked when this
+								// context is active.
+	stack_t		uc_stack;		// The stack used by this context.
+	mcontext_t	uc_mcontext;	// A machine-specific representation of the saved
+								// context.
 };
 
 struct siginfo_t {

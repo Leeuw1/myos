@@ -3,7 +3,7 @@ AS := aarch64-linux-gnu-as
 AR := aarch64-linux-gnu-ar
 ARFLAGS := rc
 CFLAGS := -nostdlib -nostdinc -Wall -Wextra -Wno-builtin-declaration-mismatch -O1 -mcpu=cortex-a53 -I./include
-objects := ./bin/string.o ./bin/stdio.o ./bin/stdlib.o ./bin/fcntl.o ./bin/unistd.o ./bin/ctype.o ./bin/errno.o ./bin/wait.o ./bin/locale.o ./bin/signal.o ./bin/time.o ./bin/math.o ./bin/dirent.o ./bin/stat.o ./bin/termios.o ./bin/termcap.o ./bin/poll.o ./bin/grp.o ./bin/pwd.o
+objects := ./bin/string.o ./bin/stdio.o ./bin/stdlib.o ./bin/fcntl.o ./bin/unistd.o ./bin/ctype.o ./bin/errno.o ./bin/wait.o ./bin/locale.o ./bin/signal.o ./bin/time.o ./bin/math.o ./bin/dirent.o ./bin/stat.o ./bin/termios.o ./bin/termcap.o ./bin/poll.o ./bin/grp.o ./bin/pwd.o ./bin/semaphore.o ./bin/dlfcn.o ./bin/mman.o
 
 #all: ./lib/libc.so.6 ./lib/libm.so.6
 all: ./lib/libmyos_c.a ./lib/libmyos_m.a

@@ -5,6 +5,7 @@ bin
 lua
 vim
 readline
+tinycc
 compile_commands.json
 libc/compile_commands.json
 libc/lib

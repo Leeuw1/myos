@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <limits.h>
 #define STDIO_NO_FUNCTIONS
 #include <stdio.h>
 
@@ -1252,4 +1253,12 @@ void proc_grow_heap(usize size) {
 		_proc_map_pages(proc, VIRT_HEAP_BASE + proc->heap_size, (u64)block->data, HEAP_BLOCK_SIZE, PF_R | PF_W);
 		proc->heap_size += HEAP_BLOCK_SIZE;
 	}
+}
+
+i32 proc_canonicalize(const char* restrict path, char* restrict dst) {
+	if (!_proc_validate_str_read(path) || !_proc_validate_write(dst, PATH_MAX)) {
+		_proc_set_errno(EFAULT);
+		return -1;
+	}
+	return _proc_fs_result(fs_canonicalize(dst, path));
 }

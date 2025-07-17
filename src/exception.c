@@ -304,6 +304,9 @@ void synchronous_handler(union SyscallArgs* args) {
 	case SYSCALL_GROW_HEAP:
 		proc_grow_heap(args->grow_heap.size);
 		return;
+	case SYSCALL_CANONICALIZE:
+		args->canonicalize.retval = proc_canonicalize(args->canonicalize.path, args->canonicalize.dst);
+		return;
 	}
 }
 

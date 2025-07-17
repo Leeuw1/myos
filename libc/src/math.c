@@ -105,6 +105,10 @@ float ldexpf(float x, int exp) {
 	UNIMP();
 }
 
+long double ldexpl(long double x, int exp) {
+	UNIMP();
+}
+
 double _log_taylor_poly(double x) {
 	assert(x > -1.0 && x <= 1.0);
 	x -= 1.0;

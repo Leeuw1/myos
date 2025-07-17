@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <limits.h>
 #include <assert.h>
 #define MYOS_NO_BOOL
 #include "../../src/syscall.h"
@@ -476,6 +477,21 @@ void* realloc(void* ptr, size_t size) {
 	return new;
 }
 
+static int __attribute__((noinline)) canonicalize(const char* restrict path, char* restrict dst) {
+	_syscall_2arg(SYSCALL_CANONICALIZE, int, path, dst);
+}
+
+char* realpath(const char* restrict file_name, char* restrict resolved_name) {
+	char* buf = resolved_name == NULL ? malloc(PATH_MAX) : resolved_name;
+	if (canonicalize(file_name, buf) == 0) {
+		return buf;
+	}
+	if (resolved_name == NULL) {
+		free(buf);
+	}
+	return NULL;
+}
+
 int setenv(const char* name, const char* value, int overwrite) {
 	if (name == NULL) {
 		errno = EINVAL;
@@ -574,7 +590,22 @@ long strtol(const char* restrict nptr, char** restrict endptr, int base) {
 	return 0;
 }
 
+long double strtold(const char* restrict nptr, char** restrict endptr) {
+	UNIMP();
+	return 0;
+}
+
+long long strtoll(const char* restrict nptr, char** restrict endptr, int base) {
+	UNIMP();
+	return 0;
+}
+
 unsigned long strtoul(const char* restrict nptr, char** restrict endptr, int base) {
+	UNIMP();
+	return 0;
+}
+
+unsigned long long strtoull(const char* restrict nptr, char** restrict endptr, int base) {
 	UNIMP();
 	return 0;
 }
