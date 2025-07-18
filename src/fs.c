@@ -597,11 +597,11 @@ static void _fs_ensure_min_size(struct FSNode* node, usize size) {
 }
 
 static isize _fs_read_reg(struct FSNode* node, void* buf, usize size, isize* offset) {
-	if (*offset > (isize)node->file.size) {
+	if (*offset >= (isize)node->file.size) {
 		return 0;
 	}
 	const usize max_size = node->file.size - *offset;
-	const usize s = size > max_size ? max_size : size;
+	const usize s = MIN(size, max_size);
 	memcpy(buf, node->file.data + *offset, s);
 	*offset += s;
 	return (isize)s;

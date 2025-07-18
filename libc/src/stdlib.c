@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -12,10 +13,9 @@
 #define UNIMP()			printf("[libc] Warning: %s is not implemented.\n", __FUNCTION__);
 
 #define MIN_BIT_INDEX		4
-#define MAX_BIT_INDEX		18
+#define MAX_BIT_INDEX		20
 #define FREE_LIST_COUNT		(MAX_BIT_INDEX - MIN_BIT_INDEX + 1)
 #define FREE_LIST_MAX_INDEX	(FREE_LIST_COUNT - 1)
-//#define MIN_NODE_SIZE		(1ull << MIN_BIT_INDEX)
 #define MAX_NODE_SIZE		((1ull << MAX_BIT_INDEX) - 16)
 
 struct FreeNode {
@@ -117,17 +117,7 @@ int atoi(const char* nptr) {
 
 // TODO
 long atol(const char* nptr) {
-	long sign = 1;
-	if (nptr[0] == '-') {
-		sign = -1;
-		++nptr;
-	}
-	long value = 0;
-	for (size_t i = 0; nptr[i] != '\0'; ++i) {
-		value *= 10;
-		value += nptr[i] - '0';
-	}
-	return value * sign;
+	return strtol(nptr, NULL, 10);
 }
 
 // TODO: use binary search
@@ -247,7 +237,7 @@ static size_t _free_list_index(size_t size) {
 		bit_index = MIN_BIT_INDEX;
 	}
 	else if (bit_index > MAX_BIT_INDEX) {
-		printf("[libc] malloc(): Size is too big.\n");
+		printf("[libc] malloc(): Size %d is too big.\n", (int)size);
 		abort();
 	}
 	else if (size & (~0ull >> first_leading_one)) {
@@ -585,9 +575,73 @@ float strtof(const char* restrict nptr, char** restrict endptr) {
 	return 0.0f;
 }
 
+// Returns -1 if base is invalid or parsed base does not match
+static int _determine_base(int base, const char* restrict* nptr) {
+	if (base != 0 && (base < 2 || base > 36)) {
+		return -1;
+	}
+	if (**nptr != '0') {
+		return base == 0 ? 10 : base;
+	}
+	++*nptr;
+	int parsed_base = 8;
+	switch (**nptr) {
+	case 'b':
+	case 'B':
+		parsed_base = 2;
+		break;
+	case 'x':
+	case 'X':
+		parsed_base = 16;
+		break;
+	}
+	if (**nptr != '\0') {
+		++*nptr;
+	}
+	return (parsed_base != base && base != 0) ? -1 : parsed_base;
+}
+
+// base is in range [2, 36]
+static bool _read_digit(long* digit, char c, int base) {
+	if (isdigit(c)) {
+		*digit = c - '0';
+	}
+	else if (islower(c)) {
+		*digit = 10 + c - 'a';
+	}
+	else if (isupper(c)) {
+		*digit = 10 + c - 'A';
+	}
+	else {
+		return false;
+	}
+	return *digit < base;
+}
+
 long strtol(const char* restrict nptr, char** restrict endptr, int base) {
-	UNIMP();
-	return 0;
+	long sign = 1;
+	if (*nptr == '-') {
+		sign = -1;
+		++nptr;
+	}
+	else if (*nptr == '+') {
+		++nptr;
+	}
+	base = _determine_base(base, &nptr);
+	if (base == -1) {
+		errno = EINVAL;
+		return 0;
+	}
+	long value = 0;
+	long digit;
+	for (; _read_digit(&digit, *nptr, base); ++nptr) {
+		value *= (long)base;
+		value += digit;
+	}
+	if (endptr != NULL) {
+		*endptr = (char*)nptr;
+	}
+	return value * sign;
 }
 
 long double strtold(const char* restrict nptr, char** restrict endptr) {

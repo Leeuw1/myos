@@ -15,6 +15,7 @@
 #include <limits.h>
 #define STDIO_NO_FUNCTIONS
 #include <stdio.h>
+#include <unistd.h>
 
 #define MAX_PROCS		8
 #define PATH_MAX_LENGTH	127
@@ -1002,7 +1003,7 @@ isize proc_read(i32 fd, void* buf, usize count) {
 	// NOTE: Doing a read of size 0 is a trick to check if data is ready
 	// POSIX says that read with size 0 may cause errors to be detected
 	// (although technically it should only work like this if O_NONBLOCK flag is set)
-	if (count == 0) {
+	if (fd == STDIN_FILENO && count == 0) {
 		if (!tty_read_would_block()) {
 			return 0;
 		}
