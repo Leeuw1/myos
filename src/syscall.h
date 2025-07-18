@@ -134,7 +134,7 @@ union SyscallArgs {
 	} open;
 	struct {
 		union {
-			//i32	retval;
+			i32	retval;
 			i16	pid;
 		} ALIGN(8);
 	} waitpid;

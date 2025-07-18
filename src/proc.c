@@ -26,7 +26,7 @@
 #define L2_TABLE_ENTRY_COUNT	512
 #define L3_TABLE_ENTRY_COUNT	512
 
-#define L3_TABLE_COUNT			10
+#define L3_TABLE_COUNT			11
 
 #define DESC_FLAGS_TABLE		0b11
 #define DESC_FLAGS_BLOCK		0b01
@@ -80,6 +80,7 @@ struct HeapBlock {
 usize _l2_indices[L3_TABLE_COUNT] = {
 	0,
 	1,
+	2,
 	0x80,
 	0x81,
 	0x82,
@@ -122,6 +123,7 @@ struct Proc {
 		struct timespec		wait_time;
 	};
 	i32				signal;
+	i32				prev_signal;
 	i16				id;
 	u8				state;
 };
@@ -130,7 +132,7 @@ static struct Proc* _procs[MAX_PROCS];
 static usize _proc_count;
 static usize _current;
 
-static _Noreturn void _proc_load_regs_and_run(struct Proc* proc);
+static _Noreturn void _proc_load_regs_and_run(void);
 static i32 _proc_program(struct Proc* proc, const char* path, const char* argv[]);
 
 static i32 _proc_new_id(void) {
@@ -187,7 +189,7 @@ void proc_main(void) {
 	}
 	print("[proc] Starting system shell...\n");
 	AUX_MU->ier_reg = 0b1;
-	_proc_load_regs_and_run(_procs[0]);
+	_proc_load_regs_and_run();
 }
 
 #define SAVED_GENERAL_REGS	(const void*)(0xffffffff0007ff00)
@@ -272,19 +274,33 @@ static void _proc_prepare_signal_handler(struct Proc* proc) {
 static void _proc_sig_dfl(struct Proc* proc) {
 	PRINT_ERROR("Not yet implemented.");
 	printf("SIGNAL: %\n", (u64)proc->signal);
-	shutdown(0, NULL);
+	proc_exit(1);
 }
 
-static _Noreturn void _proc_load_regs_and_run(struct Proc* proc) {
+static bool _proc_fatal_signal(i32 sig) {
+	switch (sig) {
+	case SIGSEGV:
+	case SIGILL:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static _Noreturn void _proc_load_regs_and_run(void) {
+	struct Proc* proc = _procs[_current];
 	_proc_use_ttbr(proc);
 	if (proc->signal != 0) {
+		// If we catch a fatal signal twice, kill process using _proc_sig_dfl
 		const void* handler = proc->sigactions[SIGNAL_INDEX(proc->signal)].handler;
-		if (handler == SIG_DFL) {
+		if (handler == SIG_DFL
+			|| (_proc_fatal_signal(proc->signal) && proc->signal == proc->prev_signal)) {
 			_proc_sig_dfl(proc);
 		}
 		else if (handler != SIG_IGN) {
 			_proc_prepare_signal_handler(proc);
 		}
+		proc->prev_signal = proc->signal;
 		proc->signal = 0;
 	}
 	// Set timer for time slice
@@ -342,7 +358,7 @@ static _Noreturn void _proc_load_regs_and_run(struct Proc* proc) {
 _Noreturn void proc_run_next(void) {
 	_proc_store_regs(_procs[_current]);
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 static isize _proc_table_index(usize index) {
@@ -744,39 +760,51 @@ static void _proc_destroy(struct Proc* proc) {
 	kfree(proc);
 }
 
+static void _proc_copy_heap(struct Proc* dst, const struct Proc* src) {
+	dst->heap_size = src->heap_size;
+	struct HeapBlock** dst_it = &dst->heap_blocks;
+	for (struct HeapBlock* it = src->heap_blocks; it != NULL; it = it->next) {
+		struct HeapBlock* copy = kmalloc_page_align(sizeof *copy);
+		memcpy(copy, it->data, sizeof *copy);
+		copy->next = NULL;
+		*dst_it = copy;
+		dst_it = &copy->next;
+	}
+}
+
 i16 proc_fork(void) {
 	struct Proc* parent = _procs[_current];
 	// We need the most up to date registers
 	_proc_store_regs(parent);
 	struct Proc* child = _proc_create(parent->cwd);
 	if (child == NULL) {
+		_proc_destroy(child);
+		--_proc_count;
 		_proc_set_errno(EAGAIN);
 		return -1;
 	}
 	child->size = parent->size;
-	child->heap_size = parent->heap_size;
-	// TODO: copy heap
 	child->image = kmalloc_page_align(child->size);
+	_proc_copy_heap(child, parent);
 	if (child->image == NULL) {
 		_proc_destroy(child);
+		--_proc_count;
 		_proc_set_errno(ENOMEM);
 		return -1;
 	}
 	memcpy(child->fd_table, parent->fd_table, sizeof child->fd_table);
 	memcpy(child->image, parent->image, child->size);
 	const i64 image_offset = (i64)child->image - (i64)parent->image;
-	_proc_copy_table(image_offset, child->l1_table.entries, parent->l1_table.entries, L1_TABLE_ENTRY_COUNT);
-	_proc_copy_table(image_offset, child->l2_table.entries, parent->l2_table.entries, L2_TABLE_ENTRY_COUNT);
 	for (usize i = 0; i < L3_TABLE_COUNT; ++i) {
 		_proc_copy_table(image_offset, child->l3_tables[i].entries, parent->l3_tables[i].entries, L3_TABLE_ENTRY_COUNT);
 	}
-	memcpy(child->regs.general, &parent->regs.general, sizeof child->regs.general);
+	memcpy(child->regs.general, parent->regs.general, sizeof child->regs.general);
 	child->regs.sp = parent->regs.sp;
 	child->regs.spsr = parent->regs.spsr;
 	child->regs.elr = parent->regs.elr;
 	child->regs.tpidrro = parent->regs.tpidrro;
 	child->regs.general[0] = 0;
-#if 1
+#if 0
 	const u64 address = child->regs.elr;
 	asm volatile (
 		"tlbi	vaae1, %0\n"
@@ -815,12 +843,13 @@ i32 proc_execve(const char* path, const char* argv[], const char* envp[]) {
 	_proc_init(new_proc, _procs[_current]->id, _procs[_current]->cwd);
 	const i32 err = _proc_program(new_proc, path, argv);
 	if (err != 0) {
+		_proc_destroy(new_proc);
 		_proc_set_errno(err);
 		return -1;
 	}
 	_proc_destroy(_procs[_current]);
 	_procs[_current] = new_proc;
-	_proc_load_regs_and_run(new_proc);
+	_proc_load_regs_and_run();
 	__builtin_unreachable();
 }
 
@@ -846,20 +875,30 @@ _Noreturn void proc_exit(i32 status) {
 		_procs[i]->state = PROC_STATE_RUN;
 	}
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 i16 proc_getpid(void) {
 	return _procs[_current]->id;
 }
 
-// TODO: we might want to return if pid is invalid
 i32 proc_waitpid(i16 pid) {
+	// TODO: maintain a list of child processes and keep track of which ones have exited
+	bool found_pid = false;
+	for (usize i = 0; i < _proc_count; ++i) {
+		if (_procs[i]->id == pid) {
+			found_pid = true;
+			break;
+		}
+	}
+	if (!found_pid) {
+		return 0;
+	}
 	_proc_store_regs(_procs[_current]);
 	_procs[_current]->wait_pid = pid;
 	_procs[_current]->state = PROC_STATE_WAIT_PID;
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 _Noreturn void proc_queue_read(struct FSNode* node, void* dst, usize size) {
@@ -869,7 +908,7 @@ _Noreturn void proc_queue_read(struct FSNode* node, void* dst, usize size) {
 	_procs[_current]->wait_read.size = size;
 	_procs[_current]->state = PROC_STATE_WAIT_READ;
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 _Noreturn void proc_update_pending_io(void) {
@@ -903,7 +942,7 @@ _Noreturn void proc_update_pending_io(void) {
 		: "r" (saved_ttbr)
 	);
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 i32 proc_rename(const char* old_path, const char* new_path) {
@@ -1178,7 +1217,7 @@ i32 proc_nanosleep(const struct timespec* rqtp, struct timespec* rmtp) {
 	_procs[_current]->state = PROC_STATE_SLEEP;
 	_procs[_current]->regs.general[0] = 0;
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 isize proc_lseek(i32 fd, isize offset, i32 whence) {
@@ -1239,7 +1278,7 @@ _Noreturn void proc_sigreturn(void) {
 	proc->regs.elr = regs[31];
 	proc->regs.sp += 256;
 	_proc_schedule_next();
-	_proc_load_regs_and_run(_procs[_current]);
+	_proc_load_regs_and_run();
 }
 
 void proc_grow_heap(usize size) {

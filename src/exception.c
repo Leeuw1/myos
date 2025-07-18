@@ -178,6 +178,9 @@ static void _synchronous_error(void) {
 		break;
 	case CLASS_INST_ABORT_LOWER_EL_EX:
 		{
+			print("Illegal Instruction from EL0\n");
+			printf("Instruction address: %\n", _elr_address());
+			_print_data_abort_info();
 			const siginfo_t info = {
 				.si_value.sival_ptr = _elr_address(),
 			};
@@ -247,7 +250,7 @@ void synchronous_handler(union SyscallArgs* args) {
 		args->open.retval = proc_open(args->open.path, args->open.flags);
 		return;
 	case SYSCALL_WAITPID:
-		/*args->waitpid.retval = */proc_waitpid(args->waitpid.pid);
+		args->waitpid.retval = proc_waitpid(args->waitpid.pid);
 		return;
 	case SYSCALL_UNLINK:
 		args->unlink.retval = proc_unlink(args->unlink.path);

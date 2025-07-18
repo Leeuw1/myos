@@ -194,7 +194,7 @@ static void parse_and_exec_command(char* command, size_t command_length) {
 	const size_t path_length = strlen(PATH) + strlen(argv[0]);
 	char* path = malloc(path_length + 1);
 	path[0] = '\0';
-	if (argv[0][0] != '/') {
+	if (argv[0][0] != '/' && argv[0][0] != '.') {
 		strcpy(path, PATH);
 	}
 	strcat(path, argv[0]);
@@ -228,13 +228,14 @@ static int repl(void) {
 	volatile int running = 1;
 	while (running) {
 		char* command = readline(prompt());
-		parse_and_exec_command(command, strlen(command));
 		if (command == NULL) {
 			continue;
 		}
-		if (command[0] != '\0') {
-			add_history(command);
+		if (command[0] == '\0') {
+			continue;
 		}
+		parse_and_exec_command(command, strlen(command));
+		add_history(command);
 		free(command);
 	}
 	return EXIT_SUCCESS;
