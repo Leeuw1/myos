@@ -10,6 +10,13 @@ c_objects := ./bin/main.o ./bin/tty.o ./bin/mailbox.o ./bin/print.o ./bin/except
 asm_objects := ./bin/init.o ./bin/vectors.o
 objects :=  $(asm_objects) ./bin/programs.o $(c_objects)
 
+disk_image_files := ./vfs ./libc/include ./libc/lib ./tinycc/arm64-libtcc1.a ./tinycc/arm64-tcc ./lua/lua ./vim/src/vim ./vim/src/xxd/xxd
+
+all: ./bin/kernel.img ./qemu_disk_image.qcow2
+
+./qemu_disk_image.qcow2: $(disk_image_files)
+	sudo ./sync_disk_image.sh
+
 ./bin/kernel.img: ./bin/kernel.elf
 	$(OBJCOPY) -O binary ./bin/kernel.elf ./bin/kernel.img
 	truncate -s %512 ./bin/kernel.img

@@ -14,10 +14,10 @@ all: ./lib/libmyos_c.a ./lib/libmyos_c2.a ./lib/libmyos_m.a
 #./lib/libm.so.6: ./bin/math.o
 #	$(CC) $(CFLAGS) -shared ./bin/math.o -o ./lib/libm.so.6
 
-./lib/libmyos_c.a: $(objects) ./bin/crt1.o ./bin/setjmp.o
-	$(AR) $(ARFLAGS) ./lib/libmyos_c.a $(objects) ./bin/crt1.o ./bin/setjmp.o
+./lib/libmyos_c.a: $(objects) ./lib/crt1.o ./bin/setjmp.o
+	$(AR) $(ARFLAGS) ./lib/libmyos_c.a $(objects) ./lib/crt1.o ./bin/setjmp.o
 
-./lib/libmyos_c2.a: $(objects) ./bin/crt1.o ./bin/crti.o ./bin/crtn.o
+./lib/libmyos_c2.a: $(objects) ./lib/crt1.o ./lib/crti.o ./lib/crtn.o
 	$(AR) $(ARFLAGS) ./lib/libmyos_c2.a $(objects)
 
 ./lib/libmyos_m.a: ./bin/math.o
@@ -29,14 +29,14 @@ $(objects): ./bin/%.o: ./src/%.c
 ./bin/math.o: ./src/math.c
 	$(CC) $(CFLAGS) -c ./src/math.c -o ./bin/math.o
 
-./bin/crt1.o: ./src/crt1.asm
-	$(AS) ./src/crt1.asm -o ./bin/crt1.o
+./lib/crt1.o: ./src/crt1.asm
+	$(AS) ./src/crt1.asm -o ./lib/crt1.o
 
-./bin/crti.o: ./src/crti.asm
-	$(AS) ./src/crti.asm -o ./bin/crti.o
+./lib/crti.o: ./src/crti.asm
+	$(AS) ./src/crti.asm -o ./lib/crti.o
 
-./bin/crtn.o: ./src/crtn.asm
-	$(AS) ./src/crtn.asm -o ./bin/crtn.o
+./lib/crtn.o: ./src/crtn.asm
+	$(AS) ./src/crtn.asm -o ./lib/crtn.o
 
 ./bin/setjmp.o: ./src/setjmp.asm
 	$(AS) ./src/setjmp.asm -o ./bin/setjmp.o

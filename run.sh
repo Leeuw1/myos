@@ -10,4 +10,4 @@ qemu-system-aarch64 $extra \
 	-serial stdio \
 	-vga none \
 	-kernel ./bin/kernel.elf \
-	-drive if=sd,file=./qemu_sd_image.img,format=raw
+	-drive if=sd,file=./qemu_disk_image.qcow2,format=qcow2

@@ -11,8 +11,10 @@ libc/compile_commands.json
 libc/lib
 qemu
 qemu_logs.txt
-qemu_sd_image.img
+*.img
+*.qcow2
 shell/*.o
 shell/shell
 shell/count
 shell/compile_commands.json
+vfs
