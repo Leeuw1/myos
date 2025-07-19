@@ -214,12 +214,7 @@ static void parse_and_exec_command(char* command, size_t command_length) {
 	int status;
 	waitpid(pid, &status, 0);
 	// Restore terminal settings which might get changed by child process
-#if 0
-	saved_termios.c_lflag = ICANON;
-	saved_termios.c_oflag = ONLCR;
-	saved_termios.c_iflag = OCRNL;
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios);
-#endif
 }
 
 static int repl(void) {
