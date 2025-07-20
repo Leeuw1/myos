@@ -166,13 +166,14 @@ static void _proc_init(struct Proc* proc, i16 id, const char* cwd) {
 
 static struct Proc* _proc_create(const char* cwd) {
 	if (_proc_count == MAX_PROCS) {
+		PRINT_ERROR("_proc_count == MAX_PROCS");
 		return NULL;
 	}
 	struct Proc* proc = kmalloc_page_align(sizeof *proc);
-#if 1
-	printf("New process: %\n", (u64)proc);
-#endif
 	_proc_init(proc, _proc_new_id(), cwd);
+#if 1
+	printf("New process: % (pid=%)\n", (u64)proc, (u64)proc->id);
+#endif
 	_procs[_proc_count++] = proc;
 	return proc;
 }
@@ -747,10 +748,6 @@ static void _proc_destroy(struct Proc* proc) {
 		:
 		: "r" (asid)
 	);
-#if 0
-	printf("[_proc_destroy] kfree(%)\n", (u64)proc->image);
-	printf("[_proc_destroy] kfree(%)\n", (u64)proc);
-#endif
 	for (struct HeapBlock* it = proc->heap_blocks; it != NULL;) {
 		struct HeapBlock* temp = it->next;
 		kfree(it);
@@ -778,8 +775,6 @@ i16 proc_fork(void) {
 	_proc_store_regs(parent);
 	struct Proc* child = _proc_create(parent->cwd);
 	if (child == NULL) {
-		_proc_destroy(child);
-		--_proc_count;
 		_proc_set_errno(EAGAIN);
 		return -1;
 	}
