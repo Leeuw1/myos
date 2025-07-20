@@ -675,7 +675,7 @@ int system(const char* command) {
 	if (pid == 0) {
 		char* const argv[] = { "/bin/sh", "-c", (char*)command, NULL };
 		execv("/bin/sh", argv);
-		return -1;
+		exit(127);
 	}
 	int status;
 	waitpid(pid, &status, 0);
