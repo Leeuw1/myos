@@ -3,6 +3,7 @@
 
 #include "core.h"
 #include <sys/stat.h>
+#include <signal.h>
 
 struct FSNode;
 struct termios;
