@@ -7,8 +7,8 @@
 // TODO
 #define WEXITSTATUS(x)	(x & 0xf)
 #define WIFEXITED(x)	1
-#define WIFSIGNALED(x)	1
-#define WTERMSIG(x)		727
+#define WIFSIGNALED(x)	0
+#define WTERMSIG(x)		0
 
 #define WEXITED		1
 #define WNOWAIT		2
