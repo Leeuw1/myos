@@ -9,6 +9,8 @@
 #define UNIMP()			printf("[libc] Warning: %s is not implemented.\n" ,__FUNCTION__);
 
 char** environ = { NULL };
+char* optarg;
+int opterr, optind, optopt;
 
 int access(const char *, int) {
 	UNIMP();
@@ -107,7 +109,12 @@ int gethostname(char* buf, size_t size) {
 
 char        *getlogin(void);
 int          getlogin_r(char *, size_t);
-int          getopt(int, char * const [], const char *);
+
+int getopt(int, char * const [], const char *) {
+	UNIMP();
+	return -1;
+}
+
 pid_t        getpgid(pid_t);
 pid_t        getpgrp(void);
 

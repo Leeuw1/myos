@@ -8,8 +8,8 @@ mount /dev/nbd0p1 ./mnt
 
 if [ "$1" == "--reset" ]; then
 	rm -rf ./mnt/*
-	mkdir ./mnt/{lib,usr,bin}
-	mkdir ./mnt/usr/include
+	mkdir ./mnt/{lib,usr,bin,libc-test}
+	mkdir ./mnt/{usr/include,libc-test/functional}
 fi
 
 rsync -a ./vfs/ ./mnt --no-owner --no-group
@@ -22,6 +22,7 @@ rsync ./tinycc/arm64-tcc ./mnt/bin/tcc --no-owner --no-group
 rsync ./lua/lua ./mnt/bin/lua --no-owner --no-group
 rsync ./vim/src/vim ./mnt/bin/vim --no-owner --no-group
 rsync ./vim/src/xxd/xxd ./mnt/bin/xxd --no-owner --no-group
+rsync ./libc-test/src/functional/*.exe ./mnt/libc-test/functional --no-owner --no-group
 
 # Unmount
 umount ./mnt

@@ -120,3 +120,8 @@ int sigprocmask(int how, const sigset_t* restrict set, sigset_t* restrict oset) 
 	//UNIMP();
 	return 0;
 }
+
+int sigtimedwait(const sigset_t *restrict, siginfo_t *restrict, const struct timespec *restrict) {
+	UNIMP();
+	return -1;
+}

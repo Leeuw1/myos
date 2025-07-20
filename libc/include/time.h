@@ -4,7 +4,6 @@
 #include <sys/types.h>
 #include <sys/select.h>
 #include <locale.h>
-#include <signal.h>
 #include <stddef.h>
 
 // TODO: macro definitions, functions

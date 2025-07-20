@@ -1,12 +1,19 @@
 #ifndef _MATH_H
 #define _MATH_H
 
-#define HUGE_VAL	__builtin_huge_val()
+#define M_PI		3.14159265358979323846
+
 #define isinf(x)	__builtin_isinf(x)
 #define isnan(x)	__builtin_isnan(x)
+#define signbit(x)	__builtin_signbit(x)
+
+#define HUGE_VAL	__builtin_huge_val()
+#define INFINITY	__builtin_inff()
 
 double ceil(double x);
 float ceilf(float x);
+double copysign(double x, double y);
+float copysignf(float x, float y);
 double exp(double x);
 float expf(float x);
 double fabs(double x);
@@ -28,6 +35,7 @@ double log2(double x);
 float log2f(float x);
 double pow(double x, double y);
 float powf(float x, float y);
+double scalbn(double x, int exp);
 double sin(double x);
 float sinf(float x);
 double sqrt(double x);

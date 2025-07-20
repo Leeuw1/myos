@@ -6,6 +6,7 @@ lua
 vim
 readline
 tinycc
+libc-test
 compile_commands.json
 libc/compile_commands.json
 libc/lib

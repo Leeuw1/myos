@@ -2,6 +2,7 @@
 #define _SIGNAL_H
 
 #include <sys/types.h>
+#include <time.h>
 
 #define SIG_DFL	(void*)0
 #define SIG_IGN	(void*)1
@@ -113,5 +114,6 @@ int sigemptyset(sigset_t* set);
 int sigismember(const sigset_t* set, int sig);
 void (*signal(int sig, void (*func)(int)))(int);
 int sigprocmask(int how, const sigset_t* restrict set, sigset_t* restrict oset);
+int sigtimedwait(const sigset_t *restrict, siginfo_t *restrict, const struct timespec *restrict);
 
 #endif //_SIGNAL_H
