@@ -28,13 +28,13 @@ static char* prompt(void) {
 	return p;
 }
 
-static void cat(int argc, char** argv) {
+static int cat(int argc, char** argv) {
 	int fd = STDIN_FILENO;
 	if (argc > 1) {
 		fd = open(argv[1], O_RDONLY);
 		if (fd == -1) {
 			perror("cat");
-			return;
+			return EXIT_FAILURE;
 		}
 	}
 	char buffer[BUFFER_SIZE];
@@ -44,12 +44,13 @@ static void cat(int argc, char** argv) {
 	}
 	if (size == -1) {
 		perror("cat");
-		return;
+		return EXIT_FAILURE;
 	}
 	close(fd);
+	return EXIT_SUCCESS;
 }
 
-static void ls(int argc, char** argv) {
+static int ls(int argc, char** argv) {
 	const char* path = ".";
 	if (argc > 1) {
 		path = argv[1];
@@ -57,13 +58,13 @@ static void ls(int argc, char** argv) {
 	const int fd = open(path, O_RDONLY);
 	if (fd == -1) {
 		perror("ls");
-		return;
+		return EXIT_FAILURE;
 	}
 	struct stat status;
 	fstat(fd, &status);
 	if (S_ISREG(status.st_mode)) {
 		printf("%s\n", path);
-		return;
+		return EXIT_SUCCESS;
 	}
 	const size_t dent_buffer_size = 64 * sizeof(struct posix_dent);
 	void* buffer = malloc(dent_buffer_size);
@@ -72,7 +73,7 @@ static void ls(int argc, char** argv) {
 	if (size < 0) {
 		perror("ls");
 		free(buffer);
-		return;
+		return EXIT_FAILURE;
 	}
 	struct posix_dent* entry = buffer;
 	for (; (void*)entry < buffer + size; ++entry) {
@@ -80,15 +81,16 @@ static void ls(int argc, char** argv) {
 	}
 	putchar('\n');
 	free(buffer);
+	return EXIT_SUCCESS;
 }
 
 static int compare_int(const void* left, const void* right) {
 	return *(const int*)left - *(const int*)right;
 }
 
-static void sort(int argc, char** argv) {
+static int sort(int argc, char** argv) {
 	if (argc <= 1) {
-		return;
+		return EXIT_SUCCESS;
 	}
 	int* arr = malloc((argc - 1) * sizeof *arr);
 	for (int i = 1; i < argc; ++i) {
@@ -100,9 +102,10 @@ static void sort(int argc, char** argv) {
 	}
 	putchar('\n');
 	free(arr);
+	return EXIT_SUCCESS;
 }
 
-static void parse_and_exec_command(char* command, size_t command_length) {
+static int parse_and_exec_command(char* command, size_t command_length) {
 	int argc = 0;
 	char* argv[MAX_ARGC + 1] = {};
 	char* arg = command;
@@ -127,69 +130,71 @@ static void parse_and_exec_command(char* command, size_t command_length) {
 	if (strcmp(argv[0], "cd") == 0) {
 		if (chdir(argc < 2 ? "/" : argv[1])) {
 			perror("chdir");
+			return EXIT_FAILURE;
 		}
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "sort") == 0) {
-		sort(argc, argv);
-		return;
+		return sort(argc, argv);
 	}
 	if (strcmp(argv[0], "ls") == 0) {
-		ls(argc, argv);
-		return;
+		return ls(argc, argv);
 	}
 	if (strcmp(argv[0], "cat") == 0) {
-		cat(argc, argv);
-		return;
+		return cat(argc, argv);
 	}
 	if (strcmp(argv[0], "mkdir") == 0) {
 		if (argc > 1) {
 			if (mkdir(argv[1], 0) == -1) {
 				perror("mkdir");
+				return EXIT_FAILURE;
 			}
 		}
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "rmdir") == 0) {
 		if (argc > 1) {
 			if (rmdir(argv[1]) == -1) {
 				perror("rmdir");
+				return EXIT_FAILURE;
 			}
 		}
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "mv") == 0) {
 		if (argc > 2) {
 			if (rename(argv[1], argv[2]) == -1) {
 				perror("mv");
+				return EXIT_FAILURE;
 			}
 		}
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "rm") == 0) {
 		if (argc > 1) {
 			if (unlink(argv[1]) == -1) {
 				perror("rm");
+				return EXIT_FAILURE;
 			}
 		}
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "exit") == 0) {
 		if (getpid() != 1) {
-			exit(0);
+			exit(EXIT_SUCCESS);
 		}
-		return;
+		return EXIT_FAILURE;
 	}
 	if (strcmp(argv[0], "echo") == 0) {
 		for (int i = 1; i < argc; ++i) {
 			printf("%s ", argv[i]);
 		}
 		putchar('\n');
-		return;
+		return EXIT_SUCCESS;
 	}
 	if (strcmp(argv[0], "clear") == 0) {
 		printf("\x1b[2J\x1b[1;1H");
-		return;
+		return EXIT_SUCCESS;
 	}
 	const size_t path_length = strlen(PATH) + strlen(argv[0]);
 	char* path = malloc(path_length + 1);
@@ -215,6 +220,7 @@ static void parse_and_exec_command(char* command, size_t command_length) {
 	waitpid(pid, &status, 0);
 	// Restore terminal settings which might get changed by child process
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios);
+	return status;
 }
 
 static int repl(void) {
@@ -252,6 +258,5 @@ int main(int argc, const char* argv[]) {
 	}
 	char command[MAX_COMMAND_LENGTH + 1];
 	strcpy(command, argv[2]);
-	parse_and_exec_command(command, command_length);
-	return EXIT_SUCCESS;
+	return parse_and_exec_command(command, command_length);
 }
