@@ -668,12 +668,10 @@ int system(const char* command) {
 	if (command == NULL) {
 		return 1;
 	}
-	printf("BEFORE FORK, pid=%d\n", (int)getpid());
 	const pid_t pid = fork();
 	if (pid == -1) {
 		return -1;
 	}
-	printf("FORKED, pid=%d\n", (int)pid);
 	if (pid == 0) {
 		char* const argv[] = { "/bin/sh", "-c", (char*)command, NULL };
 		execv("/bin/sh", argv);
