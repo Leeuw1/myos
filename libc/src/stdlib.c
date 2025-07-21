@@ -575,34 +575,20 @@ float strtof(const char* restrict nptr, char** restrict endptr) {
 	return 0.0f;
 }
 
-// Returns -1 if base is invalid or parsed base does not match
-static int _determine_base(int base, const char* restrict* nptr) {
-	if (base != 0 && (base < 2 || base > 36)) {
-		return -1;
-	}
+static int _determine_base(const char* restrict* nptr) {
 	if (**nptr != '0') {
-		return base == 0 ? 10 : base;
+		return 10;
 	}
 	++*nptr;
-	int parsed_base = 8;
-	switch (**nptr) {
-	case 'b':
-	case 'B':
-		parsed_base = 2;
-		break;
-	case 'x':
-	case 'X':
-		parsed_base = 16;
-		break;
-	}
-	if (**nptr != '\0') {
+	if (**nptr == 'x' || **nptr == 'X') {
 		++*nptr;
+		return 16;
 	}
-	return (parsed_base != base && base != 0) ? -1 : parsed_base;
+	return 8;
 }
 
 // base is in range [2, 36]
-static bool _read_digit(long* digit, char c, int base) {
+static bool _read_digit(unsigned long long* digit, char c, int base) {
 	if (isdigit(c)) {
 		*digit = c - '0';
 	}
@@ -615,11 +601,50 @@ static bool _read_digit(long* digit, char c, int base) {
 	else {
 		return false;
 	}
-	return *digit < base;
+	return *digit < (unsigned long long)base;
 }
 
-long strtol(const char* restrict nptr, char** restrict endptr, int base) {
-	long sign = 1;
+union _Long {
+	long				l;
+	long long			ll;
+	unsigned long		ul;
+	unsigned long long	ull;
+};
+
+static union _Long _long(int sign, unsigned long long value, unsigned long long max) {
+	switch (max) {
+		case LONG_MAX:
+			return (union _Long){ .l = (long)sign * (long)value };
+		case ULONG_MAX:
+			return sign == 1
+				? (union _Long){ .ul = (unsigned long)value }
+				: (union _Long){ .ul = (unsigned long)((long)sign * (long)value) };
+#if LLONG_MAX != LONG_MAX
+		case LLONG_MAX:
+			return (union _Long){ .ll = (long long)sign * (long long)value };
+#endif
+#if ULLONG_MAX != ULONG_MAX
+		case ULLONG_MAX:
+			return sign == 1
+				? (union _Long){ .ull = (unsigned long long)value }
+				: (union _Long){ .ull = (unsigned long long)((long long)sign * (long long)value) };
+#endif
+	}
+	__builtin_unreachable();
+}
+
+union _Long _generic_strtol(const char* restrict nptr, char** restrict endptr, int base, unsigned long long max) {
+	if (endptr != NULL) {
+		*endptr = (char*)nptr;
+	}
+	if (base != 0 && (base < 2 || base > 36)) {
+		errno = EINVAL;
+		return (union _Long){ .ull = 0 };
+	}
+	while (isspace(*nptr)) {
+		++nptr;
+	}
+	int sign = 1;
 	if (*nptr == '-') {
 		sign = -1;
 		++nptr;
@@ -627,21 +652,43 @@ long strtol(const char* restrict nptr, char** restrict endptr, int base) {
 	else if (*nptr == '+') {
 		++nptr;
 	}
-	base = _determine_base(base, &nptr);
-	if (base == -1) {
-		errno = EINVAL;
-		return 0;
+	if (base == 0) {
+		base = _determine_base(&nptr);
 	}
-	long value = 0;
-	long digit;
+	else if (base == 16) {
+		_determine_base(&nptr);
+		// For some reason musl's libc-test wants endptr to point to 'x' when strtol("0xz", ..., 16) is called
+		// Maybe "0x" implies there must be 1 or more valid hex digits
+		unsigned long long digit;
+		if (!_read_digit(&digit, *nptr, base)) {
+			--nptr;
+		}
+	}
+	unsigned long long value = 0;
+	unsigned long long  digit;
 	for (; _read_digit(&digit, *nptr, base); ++nptr) {
+		const unsigned long long prev_value = value;
 		value *= (long)base;
 		value += digit;
+		if (value >= prev_value && value <= max) {
+			continue;
+		}
+		if (endptr != NULL) {
+			*endptr = (char*)nptr + 1;
+		}
+		errno = ERANGE;
+		return (sign == 1 || max == ULONG_MAX || max == ULLONG_MAX)
+			? _long(1, max, max)
+			: _long(-1, max + 1, max);
 	}
 	if (endptr != NULL) {
 		*endptr = (char*)nptr;
 	}
-	return value * sign;
+	return _long(sign, value, max);
+}
+
+long strtol(const char* restrict nptr, char** restrict endptr, int base) {
+	return _generic_strtol(nptr, endptr, base, LONG_MAX).l;
 }
 
 long double strtold(const char* restrict nptr, char** restrict endptr) {
@@ -650,18 +697,15 @@ long double strtold(const char* restrict nptr, char** restrict endptr) {
 }
 
 long long strtoll(const char* restrict nptr, char** restrict endptr, int base) {
-	UNIMP();
-	return 0;
+	return _generic_strtol(nptr, endptr, base, LLONG_MAX).ll;
 }
 
 unsigned long strtoul(const char* restrict nptr, char** restrict endptr, int base) {
-	UNIMP();
-	return 0;
+	return _generic_strtol(nptr, endptr, base, ULONG_MAX).ul;
 }
 
 unsigned long long strtoull(const char* restrict nptr, char** restrict endptr, int base) {
-	UNIMP();
-	return 0;
+	return _generic_strtol(nptr, endptr, base, ULLONG_MAX).ull;
 }
 
 int system(const char* command) {
