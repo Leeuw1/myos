@@ -21,6 +21,7 @@
 #define PATH_MAX_LENGTH	127
 // Max file descriptors that a process can have open at the same time
 #define MAX_FD_ENTRIES	8
+#define MAX_CHILDREN	2
 
 #define L1_TABLE_ENTRY_COUNT	4
 #define L2_TABLE_ENTRY_COUNT	512
@@ -53,6 +54,7 @@ enum {
 	PROC_STATE_WAIT_READ,
 	PROC_STATE_WAIT_PID,
 	PROC_STATE_SLEEP,
+	PROC_STATE_ZOMBIE,
 };
 
 struct FDEntry {
@@ -121,7 +123,9 @@ struct Proc {
 		} wait_read;
 		i16					wait_pid;
 		struct timespec		wait_time;
+		i32					status;
 	};
+	i32				children[MAX_CHILDREN];
 	i32				signal;
 	i32				prev_signal;
 	i16				id;
@@ -171,7 +175,7 @@ static struct Proc* _proc_create(const char* cwd) {
 	}
 	struct Proc* proc = kmalloc_page_align(sizeof *proc);
 	_proc_init(proc, _proc_new_id(), cwd);
-#if 1
+#if 0
 	printf("New process: % (pid=%)\n", (u64)proc, (u64)proc->id);
 #endif
 	_procs[_proc_count++] = proc;
@@ -773,6 +777,17 @@ i16 proc_fork(void) {
 	struct Proc* parent = _procs[_current];
 	// We need the most up to date registers
 	_proc_store_regs(parent);
+	usize child_index;
+	for (child_index = 0; child_index < MAX_CHILDREN; ++child_index) {
+		if (parent->children[child_index] == 0) {
+			break;
+		}
+	}
+	if (child_index == MAX_CHILDREN) {
+		PRINT_ERROR("Cannot spawn any more child processes.");
+		_proc_set_errno(EAGAIN);
+		return -1;
+	}
 	struct Proc* child = _proc_create(parent->cwd);
 	if (child == NULL) {
 		_proc_set_errno(EAGAIN);
@@ -787,6 +802,7 @@ i16 proc_fork(void) {
 		_proc_set_errno(ENOMEM);
 		return -1;
 	}
+	parent->children[child_index] = child->id;
 	memcpy(child->fd_table, parent->fd_table, sizeof child->fd_table);
 	memcpy(child->image, parent->image, child->size);
 	const i64 image_offset = (i64)child->image - (i64)parent->image;
@@ -799,15 +815,6 @@ i16 proc_fork(void) {
 	child->regs.elr = parent->regs.elr;
 	child->regs.tpidrro = parent->regs.tpidrro;
 	child->regs.general[0] = 0;
-#if 0
-	const u64 address = child->regs.elr;
-	asm volatile (
-		"tlbi	vaae1, %0\n"
-		"isb"
-		:
-		: "r"(address)
-	);
-#endif
 	return child->id;
 }
 
@@ -848,6 +855,28 @@ i32 proc_execve(const char* path, const char* argv[], const char* envp[]) {
 	__builtin_unreachable();
 }
 
+// Destroy child process and also remove it from _procs and proc->children
+static void _proc_destroy_child(struct Proc* proc, usize index) {
+	usize i;
+	struct Proc* child = NULL;
+	for (i = 0; i < _proc_count; ++i) {
+		if (_procs[i]->id == proc->children[index]) {
+			child = _procs[i];
+			break;
+		}
+	}
+	if (i == _proc_count) {
+		PRINT_ERROR("Process not found in _procs.");
+		shutdown(0, NULL);
+	}
+	--_proc_count;
+	for (; i < _proc_count; ++i) {
+		_procs[i] = _procs[i + 1];
+	}
+	_proc_destroy(child);
+	proc->children[index] = 0;
+}
+
 // TODO: we need to close all file descriptions
 _Noreturn void proc_exit(i32 status) {
 	printf("[proc] Process % exiting with status %\n", (u64)_procs[_current]->id, (u64)status);
@@ -857,17 +886,26 @@ _Noreturn void proc_exit(i32 status) {
 		PRINT_ERROR("Fatal error occurred in shell.");
 		shutdown(0, NULL);
 	}
-	_proc_destroy(_procs[_current]);
-	--_proc_count;
-	for (usize i = _current; i < _proc_count; ++i) {
-		_procs[i] = _procs[i + 1];
-	}
+	_procs[_current]->status = status;
+	_procs[_current]->state = PROC_STATE_ZOMBIE;
 	for (usize i = 0; i < _proc_count; ++i) {
 		if (_procs[i]->state != PROC_STATE_WAIT_PID || _procs[i]->wait_pid != pid) {
 			continue;
 		}
 		_procs[i]->regs.general[0] = status;
 		_procs[i]->state = PROC_STATE_RUN;
+		usize child_index;
+		for (child_index = 0; child_index < MAX_CHILDREN; ++child_index) {
+			if (_procs[i]->children[child_index] == pid) {
+				break;
+			}
+		}
+		if (child_index == MAX_CHILDREN) {
+			PRINT_ERROR("Could not find child in parent->children.");
+			shutdown(0, NULL);
+		}
+		_proc_destroy_child(_procs[i], child_index);
+		break;
 	}
 	_proc_schedule_next();
 	_proc_load_regs_and_run();
@@ -877,21 +915,37 @@ i16 proc_getpid(void) {
 	return _procs[_current]->id;
 }
 
-i32 proc_waitpid(i16 pid) {
-	// TODO: maintain a list of child processes and keep track of which ones have exited
-	bool found_pid = false;
+static struct Proc* _proc_lookup(i32 pid) {
 	for (usize i = 0; i < _proc_count; ++i) {
 		if (_procs[i]->id == pid) {
-			found_pid = true;
-			break;
+			return _procs[i];
 		}
 	}
-	if (!found_pid) {
-		return 0;
+	return NULL;
+}
+
+i32 proc_waitpid(i16 pid) {
+	struct Proc* proc = _procs[_current];
+	for (usize i = 0; i < MAX_CHILDREN; ++i) {
+		if (proc->children[i] == 0) {
+			continue;
+		}
+		const struct Proc* child = _proc_lookup(proc->children[i]);
+		if (child == NULL) {
+			PRINT_ERROR("child not found in _procs.");
+			continue;
+		}
+		if (child->state != PROC_STATE_ZOMBIE
+			|| proc->children[i] != pid) {
+			continue;
+		}
+		const i32 status = child->status;
+		_proc_destroy_child(proc, i);
+		return status;
 	}
-	_proc_store_regs(_procs[_current]);
-	_procs[_current]->wait_pid = pid;
-	_procs[_current]->state = PROC_STATE_WAIT_PID;
+	_proc_store_regs(proc);
+	proc->wait_pid = pid;
+	proc->state = PROC_STATE_WAIT_PID;
 	_proc_schedule_next();
 	_proc_load_regs_and_run();
 }
