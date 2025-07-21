@@ -458,16 +458,22 @@ static unsigned int _parse_conversion_flags(const char* restrict* fmt) {
 			flags |= CONVERSION_FLAGS_ALT_FORM;
 			break;
 		case '0':
-			flags |= CONVERSION_FLAGS_ZERO_PAD;
+			if (!(flags & CONVERSION_FLAGS_LEFT_ADJ)) {
+				flags |= CONVERSION_FLAGS_ZERO_PAD;
+			}
 			break;
 		case '-':
 			flags |= CONVERSION_FLAGS_LEFT_ADJ;
+			flags &= ~CONVERSION_FLAGS_ZERO_PAD;
 			break;
 		case ' ':
-			flags |= CONVERSION_FLAGS_SPACE;
+			if (!(flags & CONVERSION_FLAGS_SIGN)) {
+				flags |= CONVERSION_FLAGS_SPACE;
+			}
 			break;
 		case '+':
 			flags |= CONVERSION_FLAGS_SIGN;
+			flags &= ~CONVERSION_FLAGS_SPACE;
 			break;
 		default:
 			return flags;
@@ -477,7 +483,7 @@ static unsigned int _parse_conversion_flags(const char* restrict* fmt) {
 
 // NOTE: This function is for parsing numbers in format strings
 static unsigned int _parse_decimal(const char* restrict* fmt) {
-	if (**fmt < '1' || **fmt > '9') {
+	if (**fmt < '0' || **fmt > '9') {
 		// TODO: throw error
 		return 0;
 	}
@@ -552,16 +558,29 @@ struct _GenericInt {
 	int8_t		sign;
 };
 
-// TODO: change format based on conversion options
-static int _print_integer(void (*char_func)(char, void*), void* data, struct _GenericInt integer, uint32_t base, bool upper, uint32_t flags, uint32_t  width, int precision) {
+// Our lowest possible base is octal, which requires:
+// - At most 1 sign character
+// - At most 22 digit characters
+#define MAX_INTEGER_CHARS	23
+
+static int _print_integer(void (*char_func)(char, void*), void* data, struct _GenericInt integer, uint32_t base, bool upper, uint32_t flags, uint32_t width, int precision) {
+	char int_string[MAX_INTEGER_CHARS];
 	int length = 0;
 	if (integer.sign == -1) {
-		char_func('-', data);
-		++length;
+		int_string[length++] = '-';
 	}
-	if (flags & CONVERSION_FLAGS_ALT_FORM) {
-		char_func('0', data);
-		char_func(upper ? 'X' : 'x', data);
+	else if (flags & CONVERSION_FLAGS_SIGN) {
+		int_string[length++] = '+';
+	}
+	else if (flags & CONVERSION_FLAGS_SPACE) {
+		int_string[length++] = ' ';
+	}
+	if ((flags & CONVERSION_FLAGS_ALT_FORM) && base != 10
+		&& (base == 8 || integer.value != 0)) {
+		int_string[length++] = '0';
+		if (base == 16) {
+			int_string[length++] = upper ? 'X' : 'x';
+		}
 	}
 	bool show_zeros = false;
 	uint64_t magnitude = _max_magnitude(base);
@@ -572,15 +591,32 @@ static int _print_integer(void (*char_func)(char, void*), void* data, struct _Ge
 			show_zeros = true;
 		}
 		if (digit != 0 || show_zeros) {
-			char_func(_digit_to_ascii(digit, upper), data);
-			++length;
+			int_string[length++] = _digit_to_ascii(digit, upper);
 		}
 	}
-	if (!show_zeros) {
-		char_func('0', data);
-		++length;
+	if (!show_zeros && precision != 0) {
+		int_string[length++] = '0';
 	}
-	return length;
+	const int zero_pad = precision > length ? precision - length : 0;
+	const int space_pad = (int)width > length + zero_pad ? (int)width - length - zero_pad : 0;
+	const char pad_char = (flags & CONVERSION_FLAGS_ZERO_PAD) ? '0' : ' ';
+	if (space_pad != 0 && !(flags & CONVERSION_FLAGS_LEFT_ADJ)) {
+		for (int i = 0; i < space_pad; ++i) {
+			char_func(pad_char, data);
+		}
+	}
+	for (int i = 0; i < zero_pad; ++i) {
+		char_func('0', data);
+	}
+	for (int i = 0; i < length; ++i) {
+		char_func(int_string[i], data);
+	}
+	if (space_pad != 0 && (flags & CONVERSION_FLAGS_LEFT_ADJ)) {
+		for (int i = 0; i < space_pad; ++i) {
+			char_func(pad_char, data);
+		}
+	}
+	return length + zero_pad + space_pad;
 }
 
 static int _print_string(void (*char_func)(char, void*), void* data, const char* restrict s, int precision) {
@@ -681,6 +717,8 @@ static int _print_arg(void (*char_func)(char, void*), void* data, const char* re
 	if (**fmt == '.') {
 		++*fmt;
 		precision = _parse_decimal(fmt);
+		// TODO: only ignore 0 flag for d, i, o, u, x, X conversion specifiers (when precision is specified)
+		flags &= ~CONVERSION_FLAGS_ZERO_PAD;
 	}
 	size_t size = _parse_conversion_length_modifier(fmt);
 	switch (**fmt) {
@@ -701,6 +739,7 @@ static int _print_arg(void (*char_func)(char, void*), void* data, const char* re
 	case 'F':
 	case 'g':
 	case 'G':
+	case 'a':
 		return _print_double(char_func, data, va_arg(*args, double) /* TODO: flags, width, precision */);
 	case 'c':
 		char_func((char)va_arg(*args, int), data);
@@ -715,6 +754,10 @@ static int _print_arg(void (*char_func)(char, void*), void* data, const char* re
 	default:
 		// TODO: throw an error
 		printf("ERROR: Unknown conversion specifier '%c'.\n", **fmt);
+		while (**fmt != '%') {
+			--*fmt;
+		}
+		printf("Format string was: \"%s\"\n", *fmt);
 		abort();
 	}
 }
@@ -774,14 +817,13 @@ static void _snprint_char_func(char c, void* data) {
 }
 
 int vsnprintf(char* restrict s, size_t size, const char* restrict fmt, va_list args) {
-	if (size == 0) {
-		// TODO: throw an error
-		return -1;
+	if (size != 0) {
+		s[size - 1] = '\0';
 	}
-	s[size - 1] = '\0';
+	const size_t end_offset = size == 0 ? 0 : size - 1;
 	struct _SNPrintData snprint_data = {
 		.it = s,
-		.end = s + size - 1,
+		.end = s + end_offset,
 	};
 	return _generic_printf(_snprint_char_func, &snprint_data, fmt, args);
 }
