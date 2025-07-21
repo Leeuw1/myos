@@ -8,7 +8,7 @@ int isalnum(int c) {
 //}
 
 int isalpha(int c) {
-	return islower(c) || islower(c);
+	return islower(c) || isupper(c);
 }
 
 //int isalpha_l(int c, locale_t l) {
