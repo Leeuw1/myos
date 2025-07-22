@@ -373,8 +373,22 @@ void* malloc(size_t size) {
 }
 
 int mkstemp(char* temp) {
-	UNIMP();
-	return 0;
+	const size_t length = strlen(temp);
+	if (length < 6) {
+		errno = EINVAL;
+		return -1;
+	}
+	char* dst = temp + length - 6;
+	if (memcmp(dst, "XXXXXX", 6) != 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	for (size_t i = 0; i < 6; ++i) {
+		dst[i] = 'a' + rand() % 26;
+	}
+	// TODO: Keep trying with different paths until succeeding
+	// TODO: Make sure that open() works with O_CREAT and O_EXCL flags
+	return open(temp, O_RDWR | O_CREAT | O_EXCL, 0 /*TODO: S_IRUSR | S_IWUSR*/);
 }
 
 static void _swap(void* restrict a, void* restrict b, void* restrict temp, size_t size) {
