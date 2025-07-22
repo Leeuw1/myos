@@ -406,8 +406,8 @@ static void _qsort(void* base, size_t n, size_t size, int (* compare)(const void
 	size_t i = 0;
 	size_t j = n - 1;
 	while (i < pivot && j > pivot) {
-		const bool left_swap = compare(base + i * size, base + pivot * size) >= 0;
-		const bool right_swap = compare(base + j * size, base + pivot * size) <= 0;
+		const bool left_swap = compare(base + i * size, base + pivot * size) > 0;
+		const bool right_swap = compare(base + j * size, base + pivot * size) < 0;
 		if (left_swap && right_swap) {
 			_swap(base + i * size, base + j * size, temp, size);
 			++i;
@@ -423,7 +423,7 @@ static void _qsort(void* base, size_t n, size_t size, int (* compare)(const void
 	}
 	if (j == pivot) {
 		for (; i < pivot; ++i) {
-			if (compare(base + i * size, base + pivot * size) <= 0) {
+			if (compare(base + i * size, base + pivot * size) < 0) {
 				continue;
 			}
 			if (i == pivot - 1) {
@@ -432,13 +432,14 @@ static void _qsort(void* base, size_t n, size_t size, int (* compare)(const void
 			else {
 				_swap(base + i * size, base + (pivot - 1) * size, temp, size);
 				_swap(base + (pivot - 1) * size, base + pivot * size, temp, size);
+				--i;
 			}
 			--pivot;
 		}
 	}
 	else if (i == pivot) {
 		for (; j > pivot; --j) {
-			if (compare(base + j * size, base + pivot * size) >= 0) {
+			if (compare(base + j * size, base + pivot * size) > 0) {
 				continue;
 			}
 			if (j == pivot + 1) {
@@ -447,6 +448,7 @@ static void _qsort(void* base, size_t n, size_t size, int (* compare)(const void
 			else {
 				_swap(base + j * size, base + (pivot + 1) * size, temp, size);
 				_swap(base + (pivot + 1) * size, base + pivot * size, temp, size);
+				++j;
 			}
 			++pivot;
 		}
