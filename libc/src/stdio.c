@@ -216,16 +216,13 @@ int fscanf(FILE* restrict stream, const char* restrict fmt, ...) {
 	return result;
 }
 
-// TODO
 int fseek(FILE* stream, long offset, int whence) {
-	UNIMP();
+	return lseek(stream->fd, (off_t)offset, whence) == -1 ? -1 : 0;
 	return 0;
 }
 
-// TODO
 int fseeko(FILE* stream, off_t offset, int whence) {
-	UNIMP();
-	return 0;
+	return lseek(stream->fd, offset, whence) == -1 ? -1 : 0;
 }
 
 // TODO
@@ -234,16 +231,12 @@ int fsetpos(FILE* stream, const fpos_t* pos) {
 	return 0;
 }
 
-// TODO
 long ftell(FILE* stream) {
-	UNIMP();
-	return 0;
+	return (long)lseek(stream->fd, 0, SEEK_CUR);
 }
 
-// TODO
 off_t ftello(FILE* stream) {
-	UNIMP();
-	return 0;
+	return lseek(stream->fd, 0, SEEK_CUR);
 }
 
 // TODO
