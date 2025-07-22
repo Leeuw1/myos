@@ -29,7 +29,7 @@ int iscntrl(int c) {
 //}
 
 int isdigit(int c) {
-	return c >= '0' && c > '9';
+	return c >= '0' && c <= '9';
 }
 
 //int isdigit_l(int, locale_t) {
