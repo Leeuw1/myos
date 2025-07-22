@@ -192,6 +192,7 @@ void fs_init(void) {
 	b |= _fs_file_create(&dst, dev, "null", FS_NODE_TYPE_CHR, _fs_read_null, _fs_write_null);
 	b |= _fs_file_create(&dst, dev, "tty", FS_NODE_TYPE_CHR, _fs_read_tty, _fs_write_tty);
 	b |= _fs_file_create(&dst, dev, "console", FS_NODE_TYPE_CHR, _fs_read_console, _fs_write_console);
+	b |= _fs_dir_create(&dst, root, "tmp");
 	u32 bin_id;
 	const i32 result = fs_find(&bin_id, "/bin");
 	struct FSNode* bin;
