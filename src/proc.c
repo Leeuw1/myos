@@ -717,9 +717,14 @@ i32 proc_chdir(const char* path) {
 		return -1;
 	}
 	char abs_path[PATH_MAX_LENGTH + 1];
-	strcpy(abs_path, _procs[_current]->cwd);
-	strcat(abs_path, "/");
-	strcat(abs_path, path);
+	if (path[0] == '/') {
+		strcpy(abs_path, path);
+	}
+	else {
+		strcpy(abs_path, _procs[_current]->cwd);
+		strcat(abs_path, "/");
+		strcat(abs_path, path);
+	}
 	char can_path[PATH_MAX_LENGTH + 1];
 	result = fs_canonicalize(can_path, abs_path);
 	if (result == 0) {
