@@ -1139,7 +1139,7 @@ isize proc_getdents(i32 fd, void* buf, usize size, i32 flags) {
 		return -1;
 	}
 	struct FDEntry* fd_entry = &_procs[_current]->fd_table[fd];
-	struct FSNode* node = fd_entry->node;
+	const struct FSNode* node = fd_entry->node;
 	if (node == NULL) {
 		_proc_set_errno(EBADF);
 		return -1;
@@ -1196,6 +1196,7 @@ i32 proc_fstat(i32 fd, struct stat* buf) {
 	switch (node->type) {
 	case FS_NODE_TYPE_REG:
 		buf->st_mode = S_IFREG;
+		buf->st_size = node->file.size;
 		break;
 	case FS_NODE_TYPE_DIR:
 		buf->st_mode = S_IFDIR;
