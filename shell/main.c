@@ -196,11 +196,15 @@ static int parse_and_exec_command(char* command, size_t command_length) {
 		printf("\x1b[2J\x1b[1;1H");
 		return EXIT_SUCCESS;
 	}
-	const size_t path_length = strlen(PATH) + strlen(argv[0]);
+	const size_t path_length = 128;
 	char* path = malloc(path_length + 1);
 	path[0] = '\0';
 	if (argv[0][0] != '/' && argv[0][0] != '.') {
 		strcpy(path, PATH);
+	}
+	else if (argv[0][0] == '.') {
+		getcwd(path, path_length + 1);
+		strcat(path, "/");
 	}
 	strcat(path, argv[0]);
 	path[path_length] = '\0';
@@ -209,7 +213,6 @@ static int parse_and_exec_command(char* command, size_t command_length) {
 
 	const pid_t pid = fork();
 	if (pid == 0) {
-		printf("[shell] Running program '%s'...\n", path);
 		char* envp[] = { NULL };
 		execve(path, argv, envp);
 		perror("execve");
