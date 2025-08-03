@@ -5,8 +5,7 @@
 #include <string.h>
 #include <errno.h>
 
-// TODO: Once syncing is implemented, we can probably decrease MAX_OPEN_NODES
-#define MAX_OPEN_NODES		128
+#define MAX_OPEN_NODES	32
 
 static struct FSNode _open_nodes[MAX_OPEN_NODES];
 static usize _open_node_count;
@@ -107,6 +106,7 @@ static i32 _fs_dir_create(struct FSNode** dst, struct FSNode* parent, const char
 	}
 	node->dir.entries[1].id = parent->id;
 	if (parent->dir.entry_count == MAX_DIR_ENTRIES) {
+		node->id = NODE_ID_NONE;
 		PRINT_ERROR("Parent directory is full.");
 		return ENOMEM;
 	}
@@ -172,14 +172,15 @@ void fs_close(struct FSNode* node) {
 		// TODO: sync
 	}
 	// NOTE: before syncing is implemented, we should prevent modified nodes from being closed
-	if (node->id >= 0xff000000 && node->should_sync) {
+	if (node->id >= 0xff000000 || node->should_sync) {
 		node->ref_count = 1;
 		return;
 	}
-	node->id = NODE_ID_NONE;
 	if (node->type == FS_NODE_TYPE_REG) {
 		kfree(node->file.data);
 	}
+	node->id = NODE_ID_NONE;
+	--_open_node_count;
 }
 
 void fs_init(void) {
