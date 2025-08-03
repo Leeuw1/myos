@@ -233,12 +233,12 @@ static const union FATEntry* _fat_next_entry(union FATEntry* buffer, u32* cluste
 }
 
 static u32 _fat_node_first_cluster(const struct FATNode* node) {
-	return ((u32)node->first_cluster_hi << 16) | (u32)node->first_cluster_lo;
+	const u32 first_cluster = ((u32)node->first_cluster_hi << 16) | (u32)node->first_cluster_lo;
+	return first_cluster == 0 ? _info.root_cluster : first_cluster;
 }
 
 // Returns the node id (sector where corresponding FATNode is located), or 0 if there are no more directory entries
 static u32 _fat_read_name(char dst[MAX_FILENAME + 1], union FATEntry* buffer, u32* cluster, u32* sector, u32* entry) {
-	usize name_it;
 	u32 node_cluster;
 	u32 node_sector;
 	u32 node_entry;
@@ -328,6 +328,33 @@ static bool _fat_read_file(void* dst, u32 start_cluster, u32 sector_count) {
 	return _fat_read_sectors(dst, _fat_cluster_to_sector(cluster), sectors_remaining);
 }
 
+static u32 _fat_find_parent_id(union FATEntry* buf, u32 first_cluster) {
+	_fat_read_sectors(buf, _fat_cluster_to_sector(first_cluster), 1);
+	const u32 parent_first_cluster = _fat_node_first_cluster(&buf[1].node);
+	if (parent_first_cluster == _info.root_cluster) {
+		return NODE_ID_ROOT;
+	}
+	_fat_read_sectors(buf, _fat_cluster_to_sector(parent_first_cluster), 1);
+	u32 cluster = _fat_node_first_cluster(&buf[1].node);
+	u32 sector = 0;
+	u32 entry = 2;
+	while (true) {
+		const u32 node_cluster = cluster;
+		const u32 node_sector = sector;
+		const u32 node_entry = entry;
+		const union FATEntry* fat_entry = _fat_next_entry(buf, &cluster, &sector, &entry);
+		if (fat_entry->first_byte == DIRECTORY_ENTRY_END) {
+			PRINT_ERROR("Could not find node.");
+			return NODE_ID_NONE;
+		}
+		if (!(fat_entry->node.attr & NODE_ATTR_DIRECTORY)
+			|| _fat_node_first_cluster(&fat_entry->node) != parent_first_cluster) {
+			continue;
+		}
+		return (_fat_cluster_to_sector(node_cluster) + node_sector) * 16 + node_entry;
+	}
+}
+
 // NOTE: node_id corresponds to the node address
 bool fat_create_fs_node(struct FSNode* node, u32 node_id) {
 	u32 first_cluster;
@@ -335,15 +362,11 @@ bool fat_create_fs_node(struct FSNode* node, u32 node_id) {
 	if (__builtin_expect(node_id == NODE_ID_ROOT, false)) {
 		node->id = NODE_ID_ROOT;
 		node->type = FS_NODE_TYPE_DIR;
-		node->dir.entry_count = 2;
-		node->dir.entries[0].id = NODE_ID_ROOT;
-		strcpy(node->dir.entries[0].name, ".");
-		node->dir.entries[1].id = NODE_ID_ROOT;
-		strcpy(node->dir.entries[1].name, "..");
 		first_cluster = _info.root_cluster;
 	}
 	else {
 		if (!_fat_read_sectors(buf, node_id / 16, 1)) {
+			kfree(buf);
 			return false;
 		}
 		const struct FATNode* fat_node = &buf[node_id % 16].node;
@@ -362,9 +385,24 @@ bool fat_create_fs_node(struct FSNode* node, u32 node_id) {
 		kfree(buf);
 		return true;
 	}
+	node->dir.entry_count = 2;
+	strcpy(node->dir.entries[0].name, ".");
+	strcpy(node->dir.entries[1].name, "..");
+	if (first_cluster == _info.root_cluster) {
+		node->dir.entries[0].id = NODE_ID_ROOT;
+		node->dir.entries[1].id = NODE_ID_ROOT;
+	}
+	else {
+		node->dir.entries[0].id = node_id;
+		node->dir.entries[1].id = _fat_find_parent_id(buf, first_cluster);
+		if (node->dir.entries[1].id == NODE_ID_NONE) {
+			kfree(buf);
+			return false;
+		}
+	}
 	u32 cluster = first_cluster;
 	u32 sector = 0;
-	u32 entry = 0;
+	u32 entry = first_cluster == _info.root_cluster ? 0 : 2;
 #if 0
 		PRINT_ERROR("Reading directory entries from disk...");
 #endif
